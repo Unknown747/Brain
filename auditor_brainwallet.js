@@ -151,7 +151,7 @@ async function runAudit(overrides = {}) {
 
     logger.section("Konfigurasi Sesi");
     logger.info(`Strategi  : ${opts.strategies.join(", ")}`);
-    logger.info(`Koin      : ${opts.coins.join(", ")}  |  EVM: ${opts.chains.map(chainName).join(", ")}`);
+    logger.info(`Koin      : ${opts.coins.join(", ")}`);
 
     const ctx = {
         aesKey,
