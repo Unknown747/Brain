@@ -19,6 +19,7 @@ const { balanceMulti, lastTxTimestamp, chainName } = require("./lib/etherscan");
 const { deriveAll } = require("./lib/derive");
 const { generateCandidatesFromWordlist, readChunks, countLines } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
+const { scrapeUrls } = require("./lib/scraper");
 
 const CONFIG_FILE = path.join(__dirname, "config.json");
 
@@ -181,10 +182,7 @@ async function runAudit(overrides = {}) {
 
     // Validasi
     const aesKey = parseAesKey(opts.AUDITOR_AES_KEY);
-    if (!opts.ETHERSCAN_API_KEY) {
-        logger.warn("ETHERSCAN_API_KEY kosong — kueri saldo akan dilewati (mode kering).");
-    }
-    opts.apiKey = opts.ETHERSCAN_API_KEY || null;
+    opts.apiKey = null; // backend RPC publik tidak butuh API key
 
     logger.info(`Strategi derivasi : ${opts.strategies.join(", ")}`);
     logger.info(`Chain dipantau    : ${opts.chains.map(chainName).join(", ")}`);
@@ -212,6 +210,29 @@ async function runAudit(overrides = {}) {
     const stats = { blocks: 0, derived: 0, fresh: 0, found: 0, candidates: 0 };
 
     try {
+        // Mode scraping URL: ambil kata-kata dari URL, jadikan brainwallet langsung
+        if (opts.urls && opts.urls.length > 0) {
+            logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
+            const words = await scrapeUrls(opts.urls);
+            logger.info(`Total kata unik dari URL: ${words.length}`);
+            if (words.length === 0) {
+                logger.warn("Tidak ada kata yang bisa di-scrape. Berhenti.");
+                return finalize(stats, startTime, ctx);
+            }
+            const chunks = chunkArray(words, opts.chunkSize);
+            for (let i = 0; i < chunks.length; i++) {
+                const candidates = generateCandidatesFromWordlist(chunks[i]);
+                const t0 = Date.now();
+                const r = await processBlock(candidates, opts, ctx);
+                const dt = (Date.now() - t0) / 1000;
+                stats.blocks++; stats.derived += r.derived; stats.fresh += r.fresh; stats.found += r.found;
+                stats.candidates += candidates.length;
+                logger.info(`Blok #${i + 1}/${chunks.length}: ${candidates.length} kandidat, ${r.fresh} baru, ${r.found} temuan (${dt.toFixed(1)}d)`);
+                if (opts.dryRun) break;
+            }
+            return finalize(stats, startTime, ctx);
+        }
+
         if (!fs.existsSync(opts.wordlist)) {
             logger.warn(`Kamus '${opts.wordlist}' tidak ditemukan, memakai daftar kecil bawaan.`);
             const candidates = generateCandidatesFromWordlist(SAMPLE_WORDLIST);

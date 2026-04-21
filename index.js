@@ -2,24 +2,34 @@
 /**
  * index.js — titik masuk CLI.
  *
- * Penggunaan:
- *   node index.js [opsi]
+ * Saat dijalankan tanpa argumen, script akan menanyakan URL
+ * (misal halaman Wikipedia). Teks dari URL akan diambil otomatis,
+ * kata-katanya dijadikan brainwallet, lalu saldo dicek di beberapa
+ * jaringan EVM (gratis tanpa API key, lewat RPC publik).
  *
- * Opsi (mengganti nilai dari config.json):
- *   --wordlist=PATH         Berkas kamus (default: rockyou.txt)
- *   --chunk=N               Ukuran chunk pembacaan kamus (default: 1000)
- *   --concurrency=N         Jumlah worker paralel (default: 5)
- *   --rate=N                Batas laju panggilan API per detik (default: 5)
- *   --batch=N               Ukuran batch alamat per panggilan saldo (default: 20, maks 20)
- *   --chains=1,137,56,...   Daftar chain id Etherscan V2
- *   --strategies=a,b,c      Strategi derivasi: sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower
- *   --log=info|debug|warn   Level log (default: info)
+ * Penggunaan:
+ *   node index.js                       (interaktif, akan minta URL)
+ *   node index.js --url=https://...     (langsung dari satu URL)
+ *   node index.js --url=URL1,URL2       (beberapa URL)
+ *   node index.js --wordlist=file.txt   (mode kamus klasik)
+ *
+ * Opsi:
+ *   --url=URL[,URL2,...]    URL yang akan di-scrape jadi sumber kata
+ *   --wordlist=PATH         Berkas kamus (alternatif ke --url)
+ *   --chunk=N               Ukuran chunk (default 1000)
+ *   --concurrency=N         Jumlah worker paralel (default 5)
+ *   --rate=N                Batas laju panggilan RPC per detik (default 5)
+ *   --batch=N               Ukuran batch alamat (default 20)
+ *   --chains=1,137,56,...   Daftar chain id (default: 1,10,56,137,8453,42161)
+ *   --strategies=a,b,c      Strategi derivasi (default: sha256,keccak256,doubleSha256)
+ *   --log=info|debug|warn   Level log
  *   --dry-run               Jalankan satu blok lalu berhenti
- *   --reset-progress        Abaikan progress.json dan mulai ulang dari awal
- *   --no-eta                Lewati hitung total baris kamus untuk ETA (lebih cepat start)
+ *   --reset-progress        Mulai dari awal
+ *   --no-eta                Lewati hitung total baris kamus
  *   --help                  Tampilkan bantuan ini
  */
 
+const readline = require("readline");
 const { runAudit } = require("./auditor_brainwallet");
 
 function parseArgs(argv) {
@@ -45,6 +55,9 @@ function showHelp() {
 
 function mapArgs(args) {
     const opts = {};
+    if (args.url) {
+        opts.urls = String(args.url).split(",").map((s) => s.trim()).filter(Boolean);
+    }
     if (args.wordlist) opts.wordlist = String(args.wordlist);
     if (args.chunk) opts.chunkSize = parseInt(args.chunk, 10);
     if (args.concurrency) opts.concurrency = parseInt(args.concurrency, 10);
@@ -59,13 +72,52 @@ function mapArgs(args) {
     return opts;
 }
 
-const args = parseArgs(process.argv);
-if (args.help) {
-    showHelp();
-    process.exit(0);
+function prompt(question) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise((resolve) => {
+        rl.question(question, (answer) => {
+            rl.close();
+            resolve(answer);
+        });
+    });
 }
 
-runAudit(mapArgs(args)).catch((err) => {
+async function main() {
+    const args = parseArgs(process.argv);
+    if (args.help) {
+        showHelp();
+        process.exit(0);
+    }
+
+    const opts = mapArgs(args);
+
+    // Mode interaktif: kalau tidak ada --url dan tidak ada --wordlist eksplisit,
+    // minta URL ke pengguna.
+    if (!opts.urls && !args.wordlist) {
+        if (!process.stdin.isTTY) {
+            console.error("[!] Tidak ada --url atau --wordlist, dan stdin bukan TTY.");
+            console.error("    Contoh: node index.js --url=https://en.wikipedia.org/wiki/Bitcoin");
+            process.exit(1);
+        }
+        console.log("==================================================");
+        console.log(" Brainwallet Auditor — mode scraping URL");
+        console.log("==================================================");
+        console.log(" Masukkan URL untuk diambil teksnya & dijadikan brainwallet.");
+        console.log(" Bisa lebih dari satu, pisahkan dengan koma.");
+        console.log(" Contoh: https://en.wikipedia.org/wiki/Bitcoin");
+        console.log("");
+        const answer = (await prompt("URL > ")).trim();
+        if (!answer) {
+            console.error("[!] URL kosong, keluar.");
+            process.exit(1);
+        }
+        opts.urls = answer.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+
+    await runAudit(opts);
+}
+
+main().catch((err) => {
     console.error("[!] Galat fatal:", err.message);
     process.exit(1);
 });
