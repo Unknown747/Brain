@@ -30,8 +30,25 @@
  *   --help                  Tampilkan bantuan ini
  */
 
+const fs = require("fs");
+const path = require("path");
 const readline = require("readline");
 const { runAudit } = require("./auditor_brainwallet");
+
+const URLS_FILE = path.join(__dirname, "urls.txt");
+
+function loadSavedUrls() {
+    if (!fs.existsSync(URLS_FILE)) return [];
+    return fs.readFileSync(URLS_FILE, "utf8")
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s && !s.startsWith("#"));
+}
+
+function saveUrls(urls) {
+    const header = "# Daftar URL yang akan di-scrape. Satu URL per baris.\n# Hapus file ini untuk diminta ulang saat menjalankan node index.js.\n";
+    fs.writeFileSync(URLS_FILE, header + urls.join("\n") + "\n");
+}
 
 function parseArgs(argv) {
     const out = {};
@@ -93,27 +110,34 @@ async function main() {
 
     const opts = mapArgs(args);
 
-    // Mode interaktif: kalau tidak ada --url dan tidak ada --wordlist eksplisit,
-    // minta URL ke pengguna.
+    // Tanpa flag apa pun: pakai urls.txt; kalau belum ada, tanya sekali lalu simpan.
     if (!opts.urls && !args.wordlist) {
-        if (!process.stdin.isTTY) {
-            console.error("[!] Tidak ada --url atau --wordlist, dan stdin bukan TTY.");
-            console.error("    Contoh: node index.js --url=https://en.wikipedia.org/wiki/Bitcoin");
-            process.exit(1);
+        let saved = loadSavedUrls();
+        if (saved.length === 0) {
+            if (!process.stdin.isTTY) {
+                console.error("[!] urls.txt belum ada dan tidak bisa minta input (bukan TTY).");
+                console.error("    Buat file urls.txt yang isinya satu URL per baris, lalu jalankan ulang.");
+                process.exit(1);
+            }
+            console.log("==================================================");
+            console.log(" Brainwallet Auditor");
+            console.log("==================================================");
+            console.log(" Belum ada urls.txt. Masukkan URL untuk di-scrape.");
+            console.log(" Bisa lebih dari satu, pisahkan dengan koma.");
+            console.log(" Contoh: https://en.wikipedia.org/wiki/Bitcoin");
+            console.log("");
+            const answer = (await prompt("URL > ")).trim();
+            if (!answer) {
+                console.error("[!] URL kosong, keluar.");
+                process.exit(1);
+            }
+            saved = answer.split(",").map((s) => s.trim()).filter(Boolean);
+            saveUrls(saved);
+            console.log(`[i] URL disimpan di ${URLS_FILE}. Lain kali tinggal jalankan 'node index.js'.`);
+        } else {
+            console.log(`[i] Memakai ${saved.length} URL dari urls.txt (hapus file untuk diminta ulang).`);
         }
-        console.log("==================================================");
-        console.log(" Brainwallet Auditor — mode scraping URL");
-        console.log("==================================================");
-        console.log(" Masukkan URL untuk diambil teksnya & dijadikan brainwallet.");
-        console.log(" Bisa lebih dari satu, pisahkan dengan koma.");
-        console.log(" Contoh: https://en.wikipedia.org/wiki/Bitcoin");
-        console.log("");
-        const answer = (await prompt("URL > ")).trim();
-        if (!answer) {
-            console.error("[!] URL kosong, keluar.");
-            process.exit(1);
-        }
-        opts.urls = answer.split(",").map((s) => s.trim()).filter(Boolean);
+        opts.urls = saved;
     }
 
     await runAudit(opts);
