@@ -104,9 +104,18 @@ async function processBlock(candidates, opts, ctx) {
             const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
             const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
             for (const chainId of opts.chains) {
+                let evmDone = 0;
                 const tasks = batches.map((batch) => async () => {
-                    try { return await balanceMulti(chainId, batch, ctx.limiter); }
-                    catch (e) { logger.warn(`evm ${chainName(chainId)}: ${e.message}`); return new Map(); }
+                    try {
+                        const r = await balanceMulti(chainId, batch, ctx.limiter);
+                        evmDone++;
+                        logger.coinBatch(`ETH/${chainName(chainId)}`, evmDone, batches.length, batch.length);
+                        return r;
+                    } catch (e) {
+                        evmDone++;
+                        logger.warn(`evm ${chainName(chainId)}: ${e.message}`);
+                        return new Map();
+                    }
                 });
                 const maps = await runWithConcurrency(tasks, opts.concurrency);
                 for (const m of maps) for (const [addr, bal] of m.entries()) {
@@ -118,7 +127,8 @@ async function processBlock(candidates, opts, ctx) {
             }
         } else {
             try {
-                const balances = await COINS[coin].balance(list.map((x) => x.address), getLimiter(coin));
+                const onBatch  = (done, total, size) => logger.coinBatch(coin.toUpperCase(), done, total, size);
+                const balances = await COINS[coin].balance(list.map((x) => x.address), getLimiter(coin), onBatch);
                 const byAddr   = new Map(list.map((x) => [x.address, x]));
                 for (const [addr, bal] of balances.entries()) {
                     if (bal > 0n) {
