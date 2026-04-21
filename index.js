@@ -1,21 +1,7 @@
 #!/usr/bin/env node
 /**
- * index.js — titik masuk CLI.
- *
- * Penggunaan:
- *   node index.js                  Tanya URL, lalu cek semua koin default.
- *   node index.js --coins=eth,btc  Batasi koin yang dicek.
- *   node index.js --chains=1,56    Batasi chain EVM (chain ID).
- *   node index.js --intensity=heavy Tingkat mutasi: light | medium | heavy
- *   node index.js --sources        Tampilkan daftar preset URL bawaan
- *   node index.js --help           Tampilkan bantuan.
- *
- * Koin yang didukung  : eth, btc, ltc, doge, trx, sol
- * Chain EVM           : 1=Ethereum  56=BNB Chain  137=Polygon  42161=Arbitrum
- * Strategi derivasi   : sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5
- *
- * Konfigurasi default dapat disimpan di config.json (lihat config.example.json).
- * Argumen CLI selalu mengalahkan config.json.
+ * index.js — titik masuk CLI Brainwallet Auditor.
+ * Lihat `node index.js --help` untuk daftar opsi lengkap.
  */
 
 const fs       = require("fs");
@@ -56,12 +42,40 @@ function loadCheckpoint() {
 }
 
 function showHelp() {
-    const src = fs.readFileSync(__filename, "utf8").split("\n");
-    for (const line of src) {
-        if (line.startsWith(" *") || line.startsWith("/**") || line.startsWith(" */")) {
-            console.log(line.replace(/^ \* ?/, "").replace(/^\/\*\*$/, "").replace(/^ \*\/$/, ""));
-        }
-    }
+    console.log(`
+Brainwallet Auditor — alat riset keamanan brainwallet
+
+Penggunaan:
+  node index.js                          Tanya URL/preset, audit semua koin default
+  node index.js --urls=einstein          Pakai preset bawaan langsung (non-interaktif)
+  node index.js --urls=einstein,bitcoin  Gabung beberapa preset/URL (dipisah koma)
+  node index.js --urls=all               Audit semua preset bawaan sekaligus
+  node index.js --sources                Tampilkan daftar preset URL bawaan
+  node decrypt.js                        Tampilkan isi hallazgos.enc
+
+Filter audit:
+  --coins=eth,btc,sol                    Batasi koin (default: semua)
+  --chains=1,56                          Batasi chain EVM (default: 1,56,137,42161)
+  --strategies=sha256,md5                Batasi strategi hashing (default: semua 6)
+  --intensity=light|medium|heavy         Tingkat mutasi (default: medium)
+
+Tuning kinerja:
+  --chunkSize=1000                       Kata per blok
+  --concurrency=5                        Permintaan paralel per chain EVM
+  --rateLimit=5                          Request/detik (EVM)
+  --batchSize=100                        Alamat per batch RPC EVM
+
+Lain-lain:
+  --logLevel=info|warn|error             Tingkat log
+  --help                                 Tampilkan bantuan ini
+
+Koin              : eth, btc, ltc, doge, trx, sol
+Chain EVM         : 1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum
+Strategi derivasi : sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5
+
+Konfigurasi default dapat disimpan di config.json (lihat config.example.json).
+Argumen CLI selalu mengalahkan config.json.
+`);
 }
 
 function prompt(question) {

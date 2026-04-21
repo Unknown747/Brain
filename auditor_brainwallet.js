@@ -2,17 +2,20 @@
  * auditor_brainwallet.js — orkestrator audit brainwallet.
  *
  * Alur:
- *  1. Scrape kata-kata dari URL (stop-words difilter otomatis).
- *  2. Hasilkan kandidat + bigram (varian huruf besar/kecil, suffix, kombinasi 2 kata).
+ *  1. Scrape teks dari URL → ekstrak kata + frasa nyata (kalimat 4–10 kata, n-gram 4/5).
+ *     Token yang sudah pernah di-scrape disaring lewat cache persisten.
+ *  2. Hasilkan varian mutasi: case, suffix, prefix, tahun, leetspeak,
+ *     camelCase/PascalCase/no-space (intensitas: light/medium/heavy).
  *  3. Derivasi private key dengan 6 strategi (sha256, doubleSha256, keccak256,
  *     sha256NoSpace, sha256Lower, md5).
  *  4. Cek saldo di 10 jaringan secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/TRX/SOL).
+ *     EVM pakai JSON-RPC batch + multi-endpoint fallback.
  *  5. Retry otomatis saat API gagal (exponential backoff, maks 3x).
  *  6. Checkpoint otomatis — bisa dilanjutkan jika proses dihentikan di tengah jalan.
  *  7. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
- *  8. Tampilkan ringkasan per koin di akhir sesi.
+ *  8. Tampilkan ringkasan per koin + kesehatan RPC di akhir sesi.
  *
- * Cache alamat hanya di memori — tidak ada file cache yang ditulis ke disk.
+ * Cache alamat hanya di memori — tidak ada file cache alamat yang ditulis ke disk.
  */
 
 const fs     = require("fs");

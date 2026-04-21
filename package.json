@@ -1,15 +1,29 @@
 {
-  "name": "workspace",
+  "name": "brainwallet-auditor",
   "version": "1.0.0",
-  "description": "<p align=\"center\"><a href=\"./README-en.md\">English</a> | Español</p>",
+  "description": "Node.js CLI brainwallet auditor — scrape teks dari URL, derivasi private key dengan 6 strategi hashing, cek saldo di 10 jaringan blockchain (ETH/BSC/Polygon/Arbitrum/BTC/LTC/DOGE/TRX/SOL) via API publik gratis tanpa API key.",
   "main": "index.js",
+  "bin": {
+    "brainwallet-auditor": "index.js"
+  },
   "scripts": {
-    "start": "node index.js",
+    "start":   "node index.js",
     "decrypt": "node decrypt.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "brainwallet",
+    "security-research",
+    "ethereum",
+    "bitcoin",
+    "solana",
+    "tron",
+    "audit",
+    "cli"
+  ],
+  "license": "MIT",
   "dependencies": {
     "ethers": "^6.16.0"
   }

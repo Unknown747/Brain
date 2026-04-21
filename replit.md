@@ -67,18 +67,21 @@ CLI args selalu mengalahkan config.json.
 
 ## Struktur
 ```
-index.js                   CLI (tanya URL, load config.json, deteksi checkpoint)
+index.js                   CLI (tanya URL/preset, load config.json, deteksi checkpoint)
 auditor_brainwallet.js     Orkestrator: scrape → derive → cek saldo → checkpoint → simpan
 decrypt.js                 Dekripsi & tampilkan hallazgos.enc
 config.example.json        Template konfigurasi
-lib/scraper.js             Scrape URL + filter stop-words + cache anti-pengulangan kata
-lib/candidates.js          Varian kata tunggal + bigram
+lib/scraper.js             Scrape URL + ekstraksi kata/frasa + filter stop-words
+lib/scrapeCache.js         Cache persisten kata/frasa antar sesi (auto-prune)
+lib/sources.js             Daftar preset URL bawaan (einstein, bible, …, all)
+lib/candidates.js          Generator varian mutasi (light/medium/heavy)
 lib/derive.js              6 strategi derivasi private key
-lib/etherscan.js           RPC publik multi-chain EVM + retry
+lib/etherscan.js           RPC publik multi-chain EVM + JSON-RPC batch + fallback
 lib/multicoin.js           Derivasi & saldo BTC/LTC/DOGE/TRX/SOL + retry
+lib/rpcStats.js            Pelacak kesehatan tiap endpoint RPC
 lib/storage.js             AES-GCM frame, found.txt, AddressCache in-memory
 lib/util.js                chunkArray, rate-limiter, concurrency, withRetry, durasi
-lib/logger.js              Logger berwarna + progress bar + ETA + coinSummary
+lib/logger.js              Logger berwarna + progress bar + ETA + coinSummary + rpcSummary
 ```
 
 ## File yang dihasilkan saat runtime
