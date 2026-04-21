@@ -1,346 +1,293 @@
 /**
  * auditor_brainwallet.js
- * Menghasilkan frasa lemah, menurunkan kunci ETH (brainwallet via SHA256), mengkueri Etherscan (opsional)
- * dan menyimpan semuanya dalam berkas terenkripsi AES-GCM.
- *
- * PENGGUNAAN AMAN:
- * - Simpan AUDITOR_AES_KEY (32 byte hex) di config.json di folder utama proyek.
- * - Jika tidak punya ETHERSCAN_API_KEY biarkan kosong di config.json -> skrip tidak akan mengkueri jaringan.
- * - Jangan commit config.json (sudah dimasukkan ke .gitignore).
+ * Orkestrator audit brainwallet:
+ *  - Membaca kamus (chunked)
+ *  - Membangkitkan kandidat + varian
+ *  - Menurunkan kunci dengan banyak strategi
+ *  - Mengkueri saldo via Etherscan API V2 secara batch & multi-chain
+ *  - Hanya alamat dengan saldo > 0 yang dikueri tx terakhir
+ *  - Menyimpan temuan terenkripsi (framed/append) + berkas teks
+ *  - Cache alamat agar tidak mengkueri ulang
+ *  - Checkpoint progres antar-blok
  */
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
-const readline = require("readline");
+const logger = require("./lib/logger");
+const { createRateLimiter, runWithConcurrency, formatDuration, eta, chunkArray } = require("./lib/util");
+const { balanceMulti, lastTxTimestamp, chainName } = require("./lib/etherscan");
+const { deriveAll } = require("./lib/derive");
+const { generateCandidatesFromWordlist, readChunks, countLines } = require("./lib/candidates");
+const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
 
-const { computeAddress } = require("ethers");
+const CONFIG_FILE = path.join(__dirname, "config.json");
+
+const DEFAULTS = {
+    wordlist: "rockyou.txt",
+    chunkSize: 1000,
+    concurrency: 5,
+    rateLimit: 5,
+    chains: [1],
+    strategies: ["sha256"],
+    logLevel: "info",
+    outFile: "hallazgos.enc",
+    foundFile: "found.txt",
+    cacheFile: "cache.txt",
+    progressFile: "progress.json",
+    batchSize: 20,
+};
+
+const SAMPLE_WORDLIST = ["password", "123456", "admin", "qwerty", "letmein"];
 
 // -----------------------
 // Konfigurasi
 // -----------------------
-const CONFIG_FILE = path.join(__dirname, "config.json");
 
-/** Memuat konfigurasi rahasia dari config.json. */
 function loadConfig() {
     if (!fs.existsSync(CONFIG_FILE)) {
-        console.warn(`[!] Berkas konfigurasi tidak ditemukan: ${CONFIG_FILE}. Salin config.example.json menjadi config.json dan isi nilainya.`);
+        logger.warn(`Berkas konfigurasi tidak ditemukan: ${CONFIG_FILE}. Menggunakan default.`);
         return {};
     }
     try {
-        const raw = fs.readFileSync(CONFIG_FILE, "utf8");
-        return JSON.parse(raw);
+        return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
     } catch (e) {
         throw new Error(`Gagal membaca ${CONFIG_FILE}: ${e.message}`);
     }
 }
 
-const CONFIG = loadConfig();
-const ETHERSCAN_API_KEY = CONFIG.ETHERSCAN_API_KEY || null; // opsional
-const AES_KEY_HEX = CONFIG.AUDITOR_AES_KEY || null; // 64 karakter hex = 32 byte
-const OUT_FILE = "hallazgos.enc";
-const FOUND_TXT_FILE = "found.txt";
-
-// -----------------------
-// Utilitas
-// -----------------------
-
-/** Menurunkan kunci privat dari sebuah frasa menggunakan SHA-256 (gaya brainwallet). Mengembalikan hex tanpa awalan '0x'. */
-function deriveEthPrivateFromPhrase(phrase) {
-    return crypto.createHash("sha256").update(phrase, "utf8").digest("hex");
-}
-
-/** Menurunkan alamat Ethereum dari kunci privat hex. */
-function ethAddressFromPrivateHex(privHex) {
-    return computeAddress("0x" + privHex);
-}
-
-/** Tidur selama ms milidetik. */
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Mengkueri saldo dan daftar transaksi (untuk mengambil tanggal transaksi terakhir).
- * Mengembalikan { balance, lastTs } — keduanya bisa null bila tidak tersedia.
- */
-async function queryEtherscanBalanceAndLastTx(address, apiKey) {
-    if (!apiKey) {
-        return { balance: null, lastTs: null };
+function buildOptions(overrides = {}) {
+    const cfg = loadConfig();
+    const merged = { ...DEFAULTS, ...cfg, ...overrides };
+    if (typeof merged.chains === "string") {
+        merged.chains = merged.chains.split(",").map((s) => parseInt(s.trim(), 10)).filter(Boolean);
     }
-
-    const base = "https://api.etherscan.io/api";
-
-    // Saldo
-    const balUrl = `${base}?module=account&action=balance&address=${address}&tag=latest&apikey=${apiKey}`;
-    const rbal = await fetch(balUrl, { signal: AbortSignal.timeout(10000) });
-    if (!rbal.ok) throw new Error(`HTTP ${rbal.status} saat memeriksa saldo`);
-    const dataBal = await rbal.json();
-    let balance;
-    if (dataBal.status !== "1" && dataBal.result === "0") {
-        balance = 0;
-    } else {
-        const parsed = Number(dataBal.result);
-        if (!Number.isFinite(parsed)) {
-            throw new Error(`respons saldo tidak valid: ${dataBal.result}`);
-        }
-        balance = parsed;
+    if (typeof merged.strategies === "string") {
+        merged.strategies = merged.strategies.split(",").map((s) => s.trim()).filter(Boolean);
     }
-
-    await sleep(600); // jeda agar tidak melebihi 2 kueri per detik
-
-    // Daftar transaksi (normal)
-    const txUrl = `${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
-    const rtx = await fetch(txUrl, { signal: AbortSignal.timeout(10000) });
-    if (!rtx.ok) throw new Error(`HTTP ${rtx.status} saat memeriksa transaksi`);
-    const dataTx = await rtx.json();
-    let lastTs = null;
-    if (dataTx.status === "1" && Array.isArray(dataTx.result) && dataTx.result.length > 0) {
-        lastTs = parseInt(dataTx.result[0].timeStamp, 10);
-    }
-    return { balance, lastTs };
+    return merged;
 }
 
 // -----------------------
-// Enkripsi / penyimpanan
-// -----------------------
-
-/** Mendapatkan kunci AES dari variabel lingkungan. */
-function getAesKey() {
-    if (!AES_KEY_HEX) {
-        throw new Error("Kunci AES tidak ditemukan. Tetapkan variabel lingkungan AUDITOR_AES_KEY (64 karakter hex => 32 byte).");
-    }
-    const key = Buffer.from(AES_KEY_HEX, "hex");
-    if (key.length !== 32) {
-        throw new Error("Kunci AES harus 32 byte (64 karakter hex).");
-    }
-    return key;
-}
-
-/**
- * Menserialisasi JSON dan mengenkripsinya dengan AES-GCM.
- * Format pada disk: nonce(12) + ciphertext + tag(16)
- */
-function encryptAndWriteRecords(records, outFile, key) {
-    const nonce = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv("aes-256-gcm", key, nonce);
-    const data = Buffer.from(JSON.stringify(records, null, 2), "utf8");
-    const ct = Buffer.concat([cipher.update(data), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    fs.writeFileSync(outFile, Buffer.concat([nonce, ct, tag]));
-    console.log(`[+] Disimpan ${records.length} catatan terenkripsi di ${outFile}`);
-}
-
-/**
- * Menambahkan catatan ke berkas teks biasa (mode append) agar mudah dibaca manusia.
- * Setiap catatan ditulis sebagai blok multibaris yang dipisahkan garis pemisah.
- */
-function appendRecordsToTxt(records, txtFile) {
-    if (!records || records.length === 0) return;
-    const lines = [];
-    for (const r of records) {
-        const tanggalCek = r.checked_at_unix
-            ? new Date(r.checked_at_unix * 1000).toISOString()
-            : "-";
-        const tanggalTx = r.last_tx_unix
-            ? new Date(r.last_tx_unix * 1000).toISOString()
-            : "-";
-        lines.push("=".repeat(60));
-        lines.push(`Pola           : ${r.pattern}`);
-        lines.push(`Alamat         : ${r.address}`);
-        lines.push(`Kunci privat   : ${r.private_key_hex}`);
-        lines.push(`Saldo (wei)    : ${r.balance_wei ?? "-"}`);
-        lines.push(`Transaksi terakhir : ${tanggalTx}`);
-        lines.push(`Diperiksa pada : ${tanggalCek}`);
-    }
-    lines.push("");
-    fs.appendFileSync(txtFile, lines.join("\n"), "utf8");
-    console.log(`[+] Ditambahkan ${records.length} catatan ke ${txtFile}`);
-}
-
-/** Mendekripsi berkas dan mengembalikan daftar catatan. */
-function decryptFileToRecords(inFile, key) {
-    const raw = fs.readFileSync(inFile);
-    const nonce = raw.subarray(0, 12);
-    const tag = raw.subarray(raw.length - 16);
-    const ct = raw.subarray(12, raw.length - 16);
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, nonce);
-    decipher.setAuthTag(tag);
-    const data = Buffer.concat([decipher.update(ct), decipher.final()]);
-    return JSON.parse(data.toString("utf8"));
-}
-
-// -----------------------
-// Generator kandidat (contoh)
+// Inti audit
 // -----------------------
 
 /**
- * Menghasilkan varian sederhana (leet speak, akhiran numerik) untuk mensimulasikan frasa lemah.
- * Jaga ukuran daftar agar tidak memicu kueri masif.
+ * Memproses satu blok kandidat:
+ *  1. Derivasi (alamat + kunci) per strategi
+ *  2. Filter alamat yang sudah di-cache
+ *  3. Batch saldo per-chain (parallel + rate-limited)
+ *  4. Untuk saldo > 0: kueri tx terakhir
+ *  5. Simpan temuan terenkripsi + teks
  */
-function generateCandidatesFromWordlist(wordlist) {
-    const candidates = [];
-    for (const w of wordlist) {
-        candidates.push(w);
-        candidates.push(w + "123");
-        candidates.push(w + "123456");
-        candidates.push(w + "2020");
-        candidates.push(w.charAt(0).toUpperCase() + w.slice(1));
-        // leet sederhana
-        const leet = w
-            .replace(/a/g, "4")
-            .replace(/e/g, "3")
-            .replace(/o/g, "0")
-            .replace(/i/g, "1")
-            .replace(/s/g, "5");
-        if (leet !== w) {
-            candidates.push(leet);
+async function processBlock(candidates, opts, ctx) {
+    // 1. Derivasi
+    const derived = [];
+    for (const phrase of candidates) {
+        for (const d of deriveAll(phrase, opts.strategies)) {
+            derived.push(d);
         }
     }
-    // dedupe
+
+    // 2. Filter cache (dedupe per address)
     const seen = new Set();
-    const res = [];
-    for (const c of candidates) {
-        if (!seen.has(c)) {
-            seen.add(c);
-            res.push(c);
+    const fresh = [];
+    let cached = 0;
+    for (const d of derived) {
+        const a = d.address.toLowerCase();
+        if (ctx.cache.has(a) || seen.has(a)) {
+            cached++;
+            continue;
+        }
+        seen.add(a);
+        fresh.push(d);
+    }
+
+    if (fresh.length === 0) {
+        logger.debug(`Blok diproses, semua alamat sudah ada di cache (${cached}).`);
+        return { derived: derived.length, fresh: 0, found: 0 };
+    }
+
+    // 3. Batch & kueri per chain
+    const byAddress = new Map();
+    for (const d of fresh) byAddress.set(d.address.toLowerCase(), d);
+
+    const batches = chunkArray(fresh.map((d) => d.address), opts.batchSize);
+    const allFound = [];
+
+    for (const chainId of opts.chains) {
+        const tasks = batches.map((batch) => async () => {
+            try {
+                return await balanceMulti(chainId, batch, opts.apiKey, ctx.limiter);
+            } catch (e) {
+                logger.warn(`balancemulti ${chainName(chainId)}: ${e.message}`);
+                return new Map();
+            }
+        });
+        const maps = await runWithConcurrency(tasks, opts.concurrency);
+
+        for (const m of maps) {
+            for (const [addr, balance] of m.entries()) {
+                if (balance > 0n) {
+                    const orig = byAddress.get(addr);
+                    if (orig) {
+                        allFound.push({ ...orig, chainId, balance: balance.toString() });
+                    }
+                }
+            }
         }
     }
-    return res;
-}
 
-// -----------------------
-// Alur utama
-// -----------------------
+    // 4. Untuk temuan, ambil tx terakhir
+    if (allFound.length > 0) {
+        const txTasks = allFound.map((f) => async () => {
+            f.lastTx = await lastTxTimestamp(f.chainId, f.address, opts.apiKey, ctx.limiter);
+        });
+        await runWithConcurrency(txTasks, opts.concurrency);
 
-async function runAudit(wordlist, etherscanApiKey, outFile) {
-    const candidates = generateCandidatesFromWordlist(wordlist);
-    console.log(`[+] Dihasilkan ${candidates.length} kandidat (termasuk varian).`);
-
-    const registros = [];
-    for (let idx = 0; idx < candidates.length; idx++) {
-        const phrase = candidates[idx];
-        const privHex = deriveEthPrivateFromPhrase(phrase);
-        const address = ethAddressFromPrivateHex(privHex);
-        let balance = null;
-        let lastTs = null;
-        try {
-            const result = await queryEtherscanBalanceAndLastTx(address, etherscanApiKey);
-            balance = result.balance;
-            lastTs = result.lastTs;
-        } catch (e) {
-            // kegagalan API tidak boleh menghentikan semuanya; catat dan lanjutkan
-            console.log(`[!] Galat saat mengkueri Etherscan untuk ${address}: ${e.message}`);
-        }
-
-        const registro = {
-            pattern: phrase,
-            private_key_hex: privHex,
-            address: address,
-            balance_wei: balance,
-            last_tx_unix: lastTs,
+        // 5. Simpan
+        const records = allFound.map((f) => ({
+            pattern: f.phrase,
+            strategy: f.strategy,
+            chain_id: f.chainId,
+            chain_name: chainName(f.chainId),
+            private_key_hex: f.privHex,
+            address: f.address,
+            balance_wei: f.balance,
+            last_tx_unix: f.lastTx ?? null,
             checked_at_unix: Math.floor(Date.now() / 1000),
-        };
-        registros.push(registro);
+        }));
 
-        // tampilan minimal untuk pemantauan
-        const i = idx + 1;
-        if (i % 10 === 0 || (balance && balance !== 0)) {
-            console.log(`[${i}/${candidates.length}] ${phrase} -> ${address}  saldo=${balance} tx_terakhir=${lastTs}`);
+        appendEncryptedFrame(records, opts.outFile, ctx.aesKey);
+        appendFoundTxt(records, opts.foundFile);
+        logger.success(`DITEMUKAN ${records.length} alamat berdana! Disimpan ke ${opts.outFile} & ${opts.foundFile}`);
+        for (const r of records) {
+            logger.success(`  ${r.address} [${r.chain_name}] saldo=${r.balance_wei} wei  pola="${r.pattern}" (${r.strategy})`);
         }
     }
 
-    // enkripsi dan simpan
-    const key = getAesKey();
-    encryptAndWriteRecords(registros, outFile, key);
+    // Tandai semua alamat sebagai sudah dicek (di cache)
+    for (const d of fresh) ctx.cache.add(d.address);
 
-    // saring catatan dengan saldo positif
-    const registrosConFondos = registros.filter((r) => r.balance_wei && r.balance_wei > 0);
-    if (registrosConFondos.length > 0) {
-        encryptAndWriteRecords(registrosConFondos, "hallazgos_con_fondos.enc", key);
-        console.log(`[+] Disimpan ${registrosConFondos.length} catatan dengan dana di hallazgos_con_fondos.enc`);
-        // Simpan juga versi teks biasa agar mudah dibaca
-        appendRecordsToTxt(registrosConFondos, FOUND_TXT_FILE);
-    } else {
-        console.log("[*] Tidak ditemukan catatan dengan dana.");
-    }
-
-    console.log("[+] Audit selesai.");
+    return { derived: derived.length, fresh: fresh.length, found: allFound.length };
 }
 
 // -----------------------
-// Generator chunk
+// Loop utama
 // -----------------------
 
-/** Membaca berkas baris demi baris dan menghasilkan potongan (chunk) dengan ukuran tertentu. */
-async function* readChunks(filePath, size = 1000) {
-    const stream = fs.createReadStream(filePath, { encoding: "latin1" });
-    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-    let chunk = [];
-    for await (const line of rl) {
-        chunk.push(line);
-        if (chunk.length === size) {
-            yield chunk;
-            chunk = [];
-        }
+async function runAudit(overrides = {}) {
+    const opts = buildOptions(overrides);
+    logger.setLevel(opts.logLevel);
+
+    // Validasi
+    const aesKey = parseAesKey(opts.AUDITOR_AES_KEY);
+    if (!opts.ETHERSCAN_API_KEY) {
+        logger.warn("ETHERSCAN_API_KEY kosong — kueri saldo akan dilewati (mode kering).");
     }
-    if (chunk.length > 0) yield chunk;
-}
+    opts.apiKey = opts.ETHERSCAN_API_KEY || null;
 
-// -----------------------
-// Eksekusi contoh
-// -----------------------
+    logger.info(`Strategi derivasi : ${opts.strategies.join(", ")}`);
+    logger.info(`Chain dipantau    : ${opts.chains.map(chainName).join(", ")}`);
+    logger.info(`Konkurensi/Laju   : ${opts.concurrency} worker, ${opts.rateLimit} req/det`);
+    logger.info(`Ukuran batch saldo: ${opts.batchSize} alamat per panggilan`);
+    logger.info(`Berkas keluaran   : ${opts.outFile}, ${opts.foundFile}`);
 
-async function main() {
-    const progressFile = "progress.txt";
+    const ctx = {
+        aesKey,
+        limiter: createRateLimiter(opts.rateLimit),
+        cache: new AddressCache(opts.cacheFile),
+    };
 
-    // Membaca progres sebelumnya
+    // Muat progres
     let startBlock = 0;
-    if (fs.existsSync(progressFile)) {
-        const content = fs.readFileSync(progressFile, "utf8").trim();
-        if (content) startBlock = parseInt(content, 10) || 0;
+    if (fs.existsSync(opts.progressFile) && !opts.resetProgress) {
+        try {
+            const p = JSON.parse(fs.readFileSync(opts.progressFile, "utf8"));
+            startBlock = p.nextBlock || 0;
+            if (startBlock > 0) logger.info(`Melanjutkan dari blok #${startBlock}`);
+        } catch {}
     }
 
-    if (!fs.existsSync("rockyou.txt")) {
-        console.log("rockyou.txt tidak ditemukan, menggunakan daftar kecil bawaan.");
-        const sampleWordlist = ["password", "123456", "admin", "qwerty", "letmein"];
-        // PERINGATAN: jangan jalankan pada daftar besar tanpa kontrol
-        await runAudit(sampleWordlist, ETHERSCAN_API_KEY, OUT_FILE);
-        return;
+    const startTime = Date.now();
+    const stats = { blocks: 0, derived: 0, fresh: 0, found: 0, candidates: 0 };
+
+    try {
+        if (!fs.existsSync(opts.wordlist)) {
+            logger.warn(`Kamus '${opts.wordlist}' tidak ditemukan, memakai daftar kecil bawaan.`);
+            const candidates = generateCandidatesFromWordlist(SAMPLE_WORDLIST);
+            logger.info(`Kandidat dihasilkan: ${candidates.length}`);
+            const r = await processBlock(candidates, opts, ctx);
+            stats.blocks++; stats.derived += r.derived; stats.fresh += r.fresh; stats.found += r.found;
+            stats.candidates += candidates.length;
+            return finalize(stats, startTime, ctx);
+        }
+
+        // Estimasi total baris untuk ETA (dilakukan sekali, asynchronous tidak berat)
+        let totalLines = null;
+        if (opts.estimateTotal !== false) {
+            logger.info("Menghitung total baris kamus untuk estimasi ETA...");
+            totalLines = await countLines(opts.wordlist);
+            logger.info(`Total baris kamus: ${totalLines.toLocaleString()}`);
+        }
+
+        let blockIndex = 0;
+        for await (const batch of readChunks(opts.wordlist, opts.chunkSize)) {
+            blockIndex++;
+            if (blockIndex < startBlock) continue;
+
+            const candidates = generateCandidatesFromWordlist(batch);
+            const t0 = Date.now();
+            const r = await processBlock(candidates, opts, ctx);
+            const dt = (Date.now() - t0) / 1000;
+
+            stats.blocks++;
+            stats.derived += r.derived;
+            stats.fresh += r.fresh;
+            stats.found += r.found;
+            stats.candidates += candidates.length;
+
+            const wordsDone = blockIndex * opts.chunkSize;
+            const etaStr = totalLines ? eta(wordsDone, totalLines, startTime) : "?";
+            const rate = (stats.candidates / ((Date.now() - startTime) / 1000)).toFixed(0);
+            logger.info(
+                `Blok #${blockIndex}: ${candidates.length} kandidat, ${r.fresh} baru, ${r.found} temuan ` +
+                `(${dt.toFixed(1)}d) | total kandidat=${stats.candidates}, temuan=${stats.found}, ` +
+                `kecepatan=${rate}/d, ETA=${etaStr}`
+            );
+
+            // Simpan checkpoint
+            fs.writeFileSync(
+                opts.progressFile,
+                JSON.stringify({ nextBlock: blockIndex + 1, updatedAt: new Date().toISOString() }, null, 2)
+            );
+
+            if (opts.dryRun) {
+                logger.info("Mode --dry-run aktif, berhenti setelah satu blok.");
+                break;
+            }
+        }
+    } finally {
+        ctx.cache.close();
     }
 
-    let i = 0;
-    for await (const batch of readChunks("rockyou.txt", 1000)) {
-        i++;
-        if (i < startBlock) continue;
-        const sampleWordlist = batch.map((line) => line.trim()).filter((line) => line.length > 0);
-        console.log(`Memproses blok ${i} berisi 1000 kata...`);
-        await runAudit(sampleWordlist, ETHERSCAN_API_KEY, OUT_FILE);
-
-        // Menyimpan progres
-        fs.writeFileSync(progressFile, String(i + 1));
-
-        console.log("Menunggu 5 detik sebelum blok berikutnya...");
-        await sleep(5000);
-    }
+    return finalize(stats, startTime, ctx);
 }
 
-if (require.main === module) {
-    main().catch((err) => {
-        console.error("[!] Galat fatal:", err);
-        process.exit(1);
-    });
+function finalize(stats, startTime, ctx) {
+    const elapsed = formatDuration(Date.now() - startTime);
+    logger.success(
+        `Audit selesai dalam ${elapsed}. Blok=${stats.blocks}, kandidat=${stats.candidates}, ` +
+        `alamat baru=${stats.fresh}, temuan=${stats.found}.`
+    );
+    return stats;
 }
+
+// -----------------------
+// Ekspor
+// -----------------------
 
 module.exports = {
-    deriveEthPrivateFromPhrase,
-    ethAddressFromPrivateHex,
-    queryEtherscanBalanceAndLastTx,
-    getAesKey,
-    encryptAndWriteRecords,
-    appendRecordsToTxt,
-    decryptFileToRecords,
-    generateCandidatesFromWordlist,
     runAudit,
-    main,
+    loadConfig,
+    buildOptions,
 };
