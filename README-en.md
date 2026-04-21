@@ -1,191 +1,228 @@
 <p align="center"><a href="./README.md">Bahasa Indonesia</a> | English</p>
 
-# Ethereum Brainwallet Auditor
+<p align="center">
+  <img src="assets/runcode.gif" alt="Demo" width="640"/>
+</p>
+
+# Brainwallet Auditor
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Security](https://img.shields.io/badge/Security-Audit-red.svg)](https://github.com/features/security)
-[![Blockchain](https://img.shields.io/badge/Blockchain-Ethereum-purple.svg)](https://ethereum.org/)
-[![Crypto](https://img.shields.io/badge/Crypto-AES--GCM-orange.svg)](https://en.wikipedia.org/wiki/AES-GCM)
-
-## 📋 Description
-
-This project implements a tool to audit weak *brainwallet*-style phrases and derive Ethereum private keys from them. It queries the blockchain (via the Etherscan API) to detect whether any of the generated keys have had activity or hold a balance, and securely stores the results encrypted with AES-GCM.
-
-The main objective is to facilitate security research on weak key generation patterns, helping to identify vulnerabilities in commonly used phrases.
+[![Purpose](https://img.shields.io/badge/Purpose-Security_Research-red.svg)](#security)
+[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#default-configuration)
+[![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_TRX_SOL-orange.svg)](#default-configuration)
 
 ---
 
-## 📁 Project Structure
+## Description
+
+**Brainwallet Auditor** is a security research tool for detecting cryptocurrency wallets created from weak phrases (*brainwallets*). It:
+
+1. Fetches & filters text from URLs (stop-words removed automatically).
+2. Generates thousands of phrase variants + bigrams (2-word combinations).
+3. Derives private keys using **6 different hashing strategies**.
+4. Checks balances across **10 blockchain networks** in parallel.
+5. Auto-retries with exponential backoff on API failure.
+6. Saves checkpoints — can resume if the process is interrupted.
+7. Stores findings encrypted with AES-256-GCM.
+8. Displays a full per-coin summary at the end of each session.
+
+> ⚠️ This tool is built solely for educational and security research purposes.
+
+---
+
+## Features
+
+| Feature | Detail |
+|---|---|
+| **Stop-words filter** | Common words (the, and, is, ...) removed automatically before processing |
+| **Variants + bigrams** | Lowercase, uppercase, capitalize, suffixes `!` `123` `1` `2024`, 2-word combos |
+| **6 hashing strategies** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
+| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (configurable) |
+| **Multi-coin** | BTC, LTC, DOGE, TRX, SOL |
+| **Auto-retry** | Exponential backoff on API failure (max 3×) |
+| **Parallel checks** | All coins & chains checked simultaneously |
+| **Speed & ETA** | Displayed live in the terminal |
+| **Checkpoint & resume** | Press Ctrl+C anytime — progress is saved and can be resumed |
+| **In-memory cache** | No address cache file — each session starts clean |
+| **Encrypted findings** | Results stored with AES-256-GCM |
+| **Bell notification** | Terminal rings when a funded wallet is found |
+| **Per-coin summary** | Table of addresses checked & found per coin at audit end |
+| **config.json** | Save your default config so you don't have to retype flags |
+
+---
+
+## Project Structure
 
 ```
-ethereum-brainwallet-auditor/
-├── index.js                 # Application entry point
-├── auditor_brainwallet.js   # Main module containing the brainwallet audit logic
-├── decrypt.js               # Helper script to decrypt result files
-├── config.json              # Local secret configuration (NOT committed)
-├── config.example.json      # Configuration template
-├── AES_key.txt              # File with the AES key for encryption/decryption
-├── rockyou.txt              # Common-password dictionary (133 MB, optional)
-├── hallazgos.enc            # Encrypted audit results
-├── package.json             # Project dependencies configuration
-├── assets/                  # Multimedia resources folder
-│   └── runcode.gif          # GIF showing code execution
-├── README.md                # Indonesian documentation
-└── README-en.md             # English documentation (this file)
+brainwallet-auditor/
+├── index.js                 # CLI entry point
+├── auditor_brainwallet.js   # Main orchestrator
+├── decrypt.js               # Decrypt hallazgos.enc
+├── config.example.json      # Config template (copy to config.json)
+├── aes.key                  # AES-256 key (auto-generated, do not commit)
+├── lib/
+│   ├── candidates.js        # Phrase variant + bigram generator
+│   ├── derive.js            # 6 private key derivation strategies
+│   ├── etherscan.js         # Multi-chain EVM balance checks via public RPC
+│   ├── logger.js            # Colored terminal + progress bar + ETA + summary
+│   ├── multicoin.js         # BTC/LTC/DOGE/TRX/SOL derivation & balance
+│   ├── scraper.js           # URL scraping + tokenization + stop-word filter
+│   ├── storage.js           # AES-GCM encryption & findings storage
+│   └── util.js              # Rate limiter, concurrency, retry, time formatting
+├── package.json
+├── README.md
+└── README-en.md
 ```
 
 ---
 
-## 🚀 Installation
+## Installation
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/Unknown747/Brain.git
-   cd Brain
-   ```
+```bash
+# 1. Clone the repository
+git clone https://github.com/Unknown747/Brain.git
+cd Brain
 
-2. Make sure Node.js 20+ is installed.
+# 2. Make sure Node.js 20+ is installed
+node --version
 
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
+# 3. Install dependencies (only ethers)
+npm install
+```
 
-4. Copy `config.example.json` to `config.json` in the project root and fill in the values:
-   ```json
-   {
-     "AUDITOR_AES_KEY": "your_256_bit_AES_key_in_64_hexadecimal_characters",
-     "ETHERSCAN_API_KEY": "your_optional_etherscan_api_key"
-   }
-   ```
-   `config.json` is listed in `.gitignore` so secrets won't be pushed to the repository.
+The AES key is auto-generated in `aes.key` on first run.
+**Back up this file** — it is required to decrypt `hallazgos.enc`.
 
 ---
 
-## 💻 Usage
+## Usage
 
-1. Download a phrase dictionary (for example `rockyou.txt`) and place it in the project folder.
+```bash
+node index.js
+# or
+npm start
+```
 
-2. Run the main script:
-   ```bash
-   node index.js
-   # or
-   npm start
-   ```
+### CLI Options
 
-The program will process the dictionary in blocks of 1000 phrases, generate variants, derive private keys, query the blockchain, and save:
+```bash
+node index.js --coins=eth,btc          # Limit coins
+node index.js --chains=1,56            # Limit EVM chains
+node index.js --strategies=sha256,md5  # Limit hashing strategies
+node index.js --help                   # Show help
+```
 
-- `hallazgos.enc` → all encrypted results.
-- `hallazgos_con_fondos.enc` → only results with positive balance, encrypted.
+> CLI arguments always override `config.json`.
 
-Execution waits 5 seconds between blocks to avoid saturating the API.
+### Default Configuration (config.json)
 
-### 🔄 Progress Tracker
+Copy `config.example.json` to `config.json` and adjust:
 
-The code includes a progress tracking system that allows you to resume the audit from where it left off:
+```json
+{
+  "coins":       "eth,btc,ltc,doge,trx,sol",
+  "chains":      "1,56,137,42161",
+  "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
+  "chunkSize":   1000,
+  "concurrency": 5,
+  "rateLimit":   5
+}
+```
 
-**How it works:**
-- `progress.txt` stores the number of the 1000-word block where you left off.
-- On startup, it reads that number and skips all previous blocks.
-- Each time a block finishes, it saves the next index in `progress.txt`.
-- If you kill the process or the machine shuts down, when you restart it will continue from there.
+`config.json` is in `.gitignore` — it will never be committed to your repository.
 
----
+### Checkpoint & Resume
 
-## 🧠 Theoretical Foundations: Is it possible to find addresses with funds?
+If the process is interrupted (Ctrl+C or crash), progress is automatically saved to `progress.json`.
+On the next run, the tool will offer to resume:
 
-In theory, yes — but in practice the probability is extremely, almost absurdly low when talking about randomly generated addresses.
+```
+▶ Checkpoint Found
+──────────────────────────────────────────────────────
+14:05:01 [INF] URL        : https://en.wikipedia.org/wiki/Bitcoin
+14:05:01 [INF] Progress   : block 2/5 done
+14:05:01 [INF] Checked    : 4200 addresses, found: 0
 
-Here's why:
+  Resume from checkpoint? (y/n) >
+```
 
-### 1️⃣ Ethereum Private Key Space
-A private key is a 256-bit number.
-That means there are 2^256 possible combinations, i.e.:
-≈ 1.1579 × 10^77 possible keys
-(a number so large that it's greater than the estimated number of atoms in the observable universe).
+### Decrypt Findings
 
-### 2️⃣ Brainwallets and Weak Patterns
-The only reason scripts like this have found funded addresses in the past is because:
-- Some people used simple passwords (e.g., "password", "123456", "letmein") as seed phrases to derive their private key.
-- Those keys are predictable and may exist in dictionaries like `rockyou.txt`.
-- This drastically reduces the search space (instead of 2^256, perhaps to a few million).
-
-**Real example:**
-A seed phrase "password123" → deterministic private key → an address someone actually used → detectable funds.
-
-### 3️⃣ Real probabilities
-- **Fully random keys** → success probability ≈ 0.
-- **Keys from weak password dictionaries** → probability > 0, but still very low.
-
-That's why scripts usually focus on brainwallets or weak keys and not on the entire possible space.
-
----
-
-## ⚠️ What is a Brainwallet and why are they vulnerable?
-
-A *brainwallet* is a technique for generating a cryptographic private key from a memorized phrase or password (a "seed phrase"), generally using a hash (like SHA-256). The idea is that the user doesn't have to store a long, complex private key, only remember a simple phrase.
-
-**However, that simplicity can be a risk:**
-
-- Many people use common phrases, simple words, or predictable patterns (dates, names, common combinations).
-- Attackers can use dictionaries and algorithms to generate thousands or millions of likely phrases and compute the derived private keys.
-- They then query the blockchain to detect whether any of those keys hold funds or have activity, and steal them.
-
-That's why brainwallets based on weak phrases are highly insecure and have been the source of significant losses in the past.
-
-This project simulates exactly that audit to detect such vulnerabilities and to educate about the importance of using truly random and secure phrases.
+```bash
+node decrypt.js
+# or
+npm run decrypt
+```
 
 ---
 
-## 🎯 Problem it solves
+## Workflow
 
-Many people use weak phrases or simple patterns to generate their private keys (brainwallets), which can be exploited by attackers to steal funds. This tool helps to:
-
-- Identify insecure patterns in keys derived from weak phrases.
-- Detect active keys with a balance on the blockchain.
-- Keep sensitive data secure through encryption.
-
----
-
-## 🔧 Approach and solution
-
-- **Candidate generation** based on common word lists and simple variants (leet speak, numeric suffixes).
-- **Private key derivation** using SHA-256 of the phrase (brainwallet).
-- **Etherscan querying** to obtain balance and last transaction date.
-- **Encrypted storage** of all records and additional filtering for keys with balance.
-- **Block processing** for efficient handling and query rate control.
-
----
-
-## 🚀 Future improvements / ⚠️ Limitations
-
-### 🚀 **Future improvements:**
-- 🔗 **Multi-blockchain support**: Extend to other types of wallets or blockchains.
-- 🗄️ **Database**: Implement databases for efficient handling of large volumes.
-- ⚡ **Parallel queries**: Optimization for parallel queries without exceeding API limits.
-- 🖥️ **Graphical interface**: Development of a graphical or web interface for result visualization.
-- 🧠 **Advanced heuristics**: More sophisticated algorithms for phrase generation.
-
-### ⚠️ **Current limitations:**
-- 🌐 **API dependency**: Depends on the availability and limits of the Etherscan API.
-- 📊 **Resource management**: Dictionary and variant generation must be used carefully to avoid saturating resources.
-- 🎯 **Limited coverage**: Does not guarantee finding all possible weak phrases, only those based on simple patterns.
+```
+URL Input
+   │
+   ▼
+Scraping & Tokenization + Stop-Word Filter
+   │
+   ▼
+Generate Variants + Bigrams
+   │  (lowercase, uppercase, capitalize, suffixes, 2-word combos)
+   ▼
+Private Key Derivation ──── 6 hashing strategies
+   │
+   ▼
+Parallel Balance Checks (per coin & chain)
+   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum  (public RPC)
+   ├── BTC  → blockchain.info
+   ├── LTC  → Blockchair
+   ├── DOGE → Blockchair
+   ├── TRX  → TronGrid
+   └── SOL  → Solana public RPC
+   │
+   ▼
+Findings → hallazgos.enc (AES-256-GCM) + found.txt
+           + terminal bell + per-coin summary
+```
 
 ---
 
-## 📋 Requirements
+## Default Configuration
 
-- 🟢 **Node.js 20+**
-- 📦 **Dependencies** listed in `package.json` (`ethers`, `dotenv`)
-- 🔑 **AES Key** of 256 bits (64 hexadecimal characters)
-- 🌐 **Etherscan API Key** (optional)
-- 📚 **Password dictionary** (e.g., `rockyou.txt` - 133 MB)
+| Parameter | Value | Description |
+|---|---|---|
+| `chains` | 1, 56, 137, 42161 | ETH · BNB Chain · Polygon · Arbitrum |
+| `coins` | eth, btc, ltc, doge, trx, sol | All coins |
+| `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | All strategies |
+| `chunkSize` | 1000 | Words per block |
+| `concurrency` | 5 | Parallel requests |
+| `rateLimit` | 5 | Requests/second (EVM) |
+| `batchSize` | 20 | Addresses per EVM batch |
 
-## 🔒 Security
+---
 
-⚠️ **WARNING**: This tool is designed solely for educational and security research purposes. Use it only in controlled environments and with appropriate authorization.
+## Theory
 
-- Generated private keys are stored encrypted locally
-- No sensitive data is transmitted to external servers
-- It is recommended to use on isolated machines for greater security
+A brainwallet generates a private key from a memorized phrase. The weakness: if the phrase is predictable, the key can be found.
+
+- Ethereum private key space: **2²⁵⁶** possibilities (~10⁷⁷)
+- Fully random key: success probability ≈ 0
+- Brainwallet from common phrase: probability > 0 — that is what this tool audits
+
+---
+
+## Requirements
+
+- **Node.js 20+**
+- Internet connection (for public blockchain APIs)
+- `aes.key` (auto-created if missing)
+
+---
+
+## Security
+
+- Found private keys stored **locally encrypted** (AES-256-GCM)
+- No sensitive data sent to third-party servers
+- Address cache is in-memory only — nothing written to disk
+- `aes.key`, `config.json`, `hallazgos.enc`, `found.txt` are all in `.gitignore`
+- Use only in controlled environments and with appropriate authorization
