@@ -298,7 +298,6 @@ async function runAudit(overrides = {}) {
             saveCheckpoint(currentCp);
         }
     } finally {
-        ctx.cache.close();
         process.removeListener("SIGINT", sigintHandler);
     }
 
