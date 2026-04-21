@@ -1,8 +1,9 @@
 # Brainwallet Auditor
 
-Node.js CLI yang men-scrape teks dari URL, memfilter stop-words, menghasilkan
-varian + bigram, lalu mengecek saldo di 10 jaringan blockchain secara paralel
-menggunakan API publik gratis tanpa API key.
+Node.js CLI yang men-scrape teks dari URL, mengekstrak kata + frasa nyata
+(kalimat 4–10 kata, n-gram 4/5), menghasilkan varian mutasi yang banyak,
+lalu mengecek saldo di 10 jaringan blockchain secara paralel menggunakan
+API publik gratis tanpa API key.
 
 ## Cara pakai
 ```
@@ -10,6 +11,7 @@ node index.js                          # tanya URL, cek semua koin default
 node index.js --coins=eth,btc,sol      # batasi koin
 node index.js --chains=1,56            # batasi chain EVM
 node index.js --strategies=sha256,md5  # batasi strategi hashing
+node index.js --intensity=heavy        # tingkat mutasi: light | medium | heavy
 node decrypt.js                        # tampilkan isi hallazgos.enc
 ```
 
@@ -45,8 +47,14 @@ CLI args selalu mengalahkan config.json.
 | md5 | SHA-256(MD5) — pola brainwallet era 2011–2013 |
 
 ## Fitur utama
-- **Stop-words filter**: kata umum (the, and, is ...) dibuang sebelum diproses
-- **Bigram**: kombinasi 2 kata berdekatan ikut dicek
+- **Scraper cerdas**: HTML dibersihkan dari nav/footer/sidebar/script + filter token sampah (ALL-CAPS panjang, mayoritas digit, fragmen URL)
+- **Frasa nyata**: ekstraksi kalimat utuh 4–10 kata + n-gram 4/5 dari urutan asli teks
+- **Stop-words multi-bahasa**: EN + ID + ES (dipakai untuk kata tunggal; frasa tetap mempertahankan stop-words)
+- **Mutasi password**: case, suffix (!, 123, 1234, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse, camelCase/PascalCase untuk frasa
+- **Tingkat intensitas**: `light` / `medium` / `heavy` — atur cakupan vs kecepatan
+- **JSON-RPC batch (EVM)**: 1 request berisi banyak alamat, jauh lebih cepat
+- **Multi-RPC fallback**: ETH/BSC/Polygon/Arbitrum/SOL/BTC otomatis pindah endpoint kalau gagal
+- **Tabel kesehatan RPC**: lihat endpoint mana yang dipakai & berapa kali gagal di akhir sesi
 - **Retry otomatis**: exponential backoff saat API gagal (maks 3×)
 - **Checkpoint & resume**: simpan progres, bisa dilanjutkan setelah Ctrl+C
 - **Cache in-memory**: tidak ada file cache alamat yang ditulis ke disk

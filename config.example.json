@@ -9,5 +9,6 @@
   "concurrency": 5,
   "rateLimit":   5,
   "batchSize":   100,
+  "intensity":   "medium",
   "logLevel":    "info"
 }

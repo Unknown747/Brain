@@ -33,6 +33,7 @@ const DEFAULTS = {
     concurrency: 5,
     rateLimit:   5,
     batchSize:   100,
+    intensity:   "medium",
     chains:      [1, 56, 137, 42161],
     coins:       ["eth", "btc", "ltc", "doge", "trx", "sol"],
     strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
@@ -236,6 +237,7 @@ async function runAudit(overrides = {}) {
             logger.info(`Strategi  : ${opts.strategies.join(", ")}`);
             logger.info(`Koin      : ${opts.coins.join(", ")}`);
             logger.info(`EVM Chain : ${opts.chains.map(chainName).join(", ")}`);
+            logger.info(`Intensitas: ${opts.intensity}`);
 
             logger.section("Scraping URL");
             logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
@@ -252,7 +254,7 @@ async function runAudit(overrides = {}) {
         const totalBlocks = chunks.length;
 
         for (let i = startBlock; i < totalBlocks; i++) {
-            const candidates = generateVariants(chunks[i]);
+            const candidates = generateVariants(chunks[i], { intensity: opts.intensity });
             const t0 = Date.now();
             const r  = await processBlock(candidates, opts, ctx);
             const dt = Date.now() - t0;

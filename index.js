@@ -6,6 +6,7 @@
  *   node index.js                  Tanya URL, lalu cek semua koin default.
  *   node index.js --coins=eth,btc  Batasi koin yang dicek.
  *   node index.js --chains=1,56    Batasi chain EVM (chain ID).
+ *   node index.js --intensity=heavy Tingkat mutasi: light | medium | heavy
  *   node index.js --help           Tampilkan bantuan.
  *
  * Koin yang didukung  : eth, btc, ltc, doge, trx, sol
