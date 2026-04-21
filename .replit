@@ -1,4 +1,4 @@
-modules = ["python-3.12"]
+modules = ["python-3.12", "nodejs-20"]
 [agent]
 expertMode = true
 
@@ -22,9 +22,9 @@ args = "Auditor"
 name = "Auditor"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python auditor_brainwallet.py"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node auditor_brainwallet.js"
