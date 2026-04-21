@@ -4,7 +4,8 @@
   "description": "<p align=\"center\"><a href=\"./README-en.md\">English</a> | Español</p>",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "decrypt": "node decrypt.js"
   },
   "keywords": [],
   "author": "",

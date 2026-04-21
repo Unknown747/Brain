@@ -20,8 +20,11 @@ Tujuan utamanya adalah memfasilitasi penelitian keamanan terhadap pola pembuatan
 
 ```
 ethereum-brainwallet-auditor/
-├── auditor_brainwallet.js   # Skrip utama untuk mengaudit brainwallet
+├── index.js                 # Titik masuk (entry point) aplikasi
+├── auditor_brainwallet.js   # Modul utama berisi logika audit brainwallet
 ├── decrypt.js               # Skrip bantu untuk mendekripsi berkas hasil
+├── config.json              # Konfigurasi rahasia lokal (TIDAK di-commit)
+├── config.example.json      # Template konfigurasi
 ├── AES_key.txt              # Berkas berisi kunci AES untuk enkripsi/dekripsi
 ├── rockyou.txt              # Kamus kata sandi umum (133 MB, opsional)
 ├── hallazgos.enc            # Hasil audit terenkripsi
@@ -66,7 +69,9 @@ ethereum-brainwallet-auditor/
 
 2. Jalankan skrip utama:
    ```bash
-   node auditor_brainwallet.js
+   node index.js
+   # atau
+   npm start
    ```
 
 Program akan memproses kamus dalam blok berisi 1000 frasa, menghasilkan varian, menurunkan kunci privat, mengkueri blockchain, dan menyimpan:

@@ -20,8 +20,11 @@ The main objective is to facilitate security research on weak key generation pat
 
 ```
 ethereum-brainwallet-auditor/
-├── auditor_brainwallet.js   # Main script to audit brainwallets
+├── index.js                 # Application entry point
+├── auditor_brainwallet.js   # Main module containing the brainwallet audit logic
 ├── decrypt.js               # Helper script to decrypt result files
+├── config.json              # Local secret configuration (NOT committed)
+├── config.example.json      # Configuration template
 ├── AES_key.txt              # File with the AES key for encryption/decryption
 ├── rockyou.txt              # Common-password dictionary (133 MB, optional)
 ├── hallazgos.enc            # Encrypted audit results
@@ -66,7 +69,9 @@ ethereum-brainwallet-auditor/
 
 2. Run the main script:
    ```bash
-   node auditor_brainwallet.js
+   node index.js
+   # or
+   npm start
    ```
 
 The program will process the dictionary in blocks of 1000 phrases, generate variants, derive private keys, query the blockchain, and save:

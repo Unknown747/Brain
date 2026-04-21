@@ -342,4 +342,5 @@ module.exports = {
     decryptFileToRecords,
     generateCandidatesFromWordlist,
     runAudit,
+    main,
 };
