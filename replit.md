@@ -1,64 +1,66 @@
-# Ethereum Brainwallet Auditor
+# Brainwallet Auditor
 
-## Overview
-Node.js 20 CLI that derives Ethereum private keys from weak "brainwallet" phrases using multiple derivation strategies, queries Etherscan V2 across multiple EVM chains for balances, and stores funded wallets encrypted with AES-GCM. Script messages are in Bahasa Indonesia.
+Node.js CLI yang men-scrape teks dari URL (mis. Wikipedia), menjadikan
+kata-katanya brainwallet, lalu mengecek saldo di banyak koin secara paralel
+menggunakan API publik gratis tanpa API key.
 
-## Project Type
-Command-line script (no frontend, no backend server).
+## Cara pakai
+```
+node index.js                          # tanya URL, cek semua koin default
+node index.js --coins=eth,btc,sol      # batasi koin
+node decrypt.js                        # tampilkan isi hallazgos.enc
+```
+
+Saat dijalankan, script akan menanyakan URL. Bisa lebih dari satu (pisahkan
+dengan koma).
 
 ## Stack
 - Node.js 20
-- Dependencies: `ethers` (only)
+- Dependensi: `ethers` saja
 
-## Entry Point
-`index.js` — CLI parser. Loads config from `config.json`, builds options, calls `auditor_brainwallet.js#runAudit`.
+## Koin & sumber saldo (semua gratis, tanpa API key)
+| Koin | Sumber |
+|------|--------|
+| ETH (multi-chain EVM) | RPC publik llamarpc / publicnode |
+| BTC  | blockchain.info (50 alamat per request) |
+| LTC  | blockchair.com (100 per request) |
+| DOGE | blockchair.com (100 per request) |
+| TRX  | TronGrid |
+| SOL  | RPC publik Solana (`getMultipleAccounts`, 100 per request) |
 
-Auxiliary: `decrypt.js <file>` decrypts the framed `hallazgos.enc` file and prints records.
+Setiap koin punya rate-limiter sendiri dan dijalankan paralel dalam satu blok,
+jadi menambah koin baru tidak mengalikan waktu — total ≈ koin paling lambat.
 
-## Modules (`lib/`)
-- `logger.js` — leveled colored logger (debug/info/warn/error/success).
-- `util.js` — concurrency pool, rate limiter (token-bucket), ETA helper, duration formatter.
-- `derive.js` — 5 derivation strategies: `sha256`, `doubleSha256`, `keccak256`, `sha256NoSpace`, `sha256Lower`.
-- `candidates.js` — generates phrase variants from a wordlist chunk.
-- `etherscan.js` — Etherscan V2 client (`balancemulti`, `txlist`) with multi-chain support and rate-limit retry.
-- `storage.js` — framed AES-GCM append format `[4B len][12B nonce][ct][16B tag]`, `found.txt` writer, `AddressCache`.
+## Struktur
+```
+index.js                   CLI (tanya URL, parse --coins/--help, panggil runAudit)
+auditor_brainwallet.js     Orkestrator: scrape → derive → cek saldo → simpan
+decrypt.js                 Dekripsi & tampilkan hallazgos.enc
+lib/scraper.js             Scrape URL + cache anti-pengulangan kata
+lib/candidates.js          Bangkitkan varian dari daftar kata
+lib/derive.js              Strategi derivasi (sha256, keccak256, dll)
+lib/etherscan.js           Backend RPC publik untuk chain EVM
+lib/multicoin.js           Derivasi & saldo BTC/LTC/DOGE/TRX/SOL
+lib/storage.js             AES-GCM frame, found.txt, AddressCache
+lib/util.js                chunkArray, rate-limiter, concurrency, durasi
+lib/logger.js              Logger berwarna leveled
+```
 
-## Configuration (`config.json`, gitignored)
-| Key | Default | Purpose |
-|---|---|---|
-| `AUDITOR_AES_KEY` | — | 64 hex chars (32 bytes) AES-256-GCM key |
-| `ETHERSCAN_API_KEY` | — | V2 API key (skips network if absent) |
-| `wordlist` | `rockyou.txt` | Input dictionary |
-| `chunkSize` | 1000 | Lines per block |
-| `batchSize` | 20 | Addresses per `balancemulti` call |
-| `concurrency` | 2 | Parallel workers |
-| `rateLimit` | 2 | Requests per second |
-| `chains` | `[1,10,56,137,8453,42161]` | Chain IDs to monitor |
-| `strategies` | `["sha256","keccak256","doubleSha256"]` | Derivation strategies |
-| `logLevel` | `info` | `debug`/`info`/`warn`/`error` |
-| `outFile` | `hallazgos.enc` | Encrypted output |
-| `foundFile` | `found.txt` | Plaintext list of funded wallets only |
-| `cacheFile` | `cache.txt` | Address de-dup cache |
-| `progressFile` | `progress.json` | Block checkpoint |
+## File yang dihasilkan saat runtime
+| File | Isi |
+|------|-----|
+| `aes.key`         | Kunci AES-256 (auto-generate saat pertama jalan) |
+| `hallazgos.enc`   | Temuan terenkripsi (framed AES-GCM) |
+| `found.txt`       | Temuan plain text, tab-separated |
+| `cache.txt`       | Cache alamat yang sudah dicek (per-koin) |
+| `words_cache.txt` | Kata-kata yang sudah pernah di-scrape |
 
-CLI flags override config values: `--wordlist`, `--chunk`, `--concurrency`, `--rate`, `--batch`, `--chains`, `--strategies`, `--log`, `--dry-run`, `--reset-progress`, `--no-eta`.
-
-Supported chains: `1` Ethereum, `10` Optimism, `56` BNB, `137` Polygon, `8453` Base, `42161` Arbitrum, `43114` Avalanche.
-
-## Output
-- `hallazgos.enc` — framed AES-GCM, contains funded-wallet JSON records.
-- `found.txt` — append-only plaintext, only entries with balance > 0.
-- `cache.txt` — sticky address cache to avoid re-querying.
-- `progress.json` — checkpoint of next block index.
+## Strategi derivasi
+`sha256` (default), `doubleSha256`, `keccak256`, `sha256NoSpace`, `sha256Lower`.
 
 ## Workflow
-- `Auditor` — runs `node index.js`.
+- `Auditor` — `node index.js`
 
-## Documentation
-- `README.md` — Bahasa Indonesia
-- `README-en.md` — English
-
-## Notes
-- Only funded wallets (`balance > 0`) are persisted to `found.txt` and `hallazgos.enc`.
-- Etherscan V2 endpoint: `https://api.etherscan.io/v2/api?chainid=<id>&...`. Free-tier keys are limited to ~3 req/sec; defaults are tuned to 2 req/sec for safety.
-- `rockyou.txt` is not bundled; without it, a tiny built-in sample list is used.
+## Catatan keamanan
+- Hanya alamat dengan saldo > 0 yang disimpan.
+- `aes.key` JANGAN dihapus — tanpa kunci, `hallazgos.enc` tidak bisa didekripsi.

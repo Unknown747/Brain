@@ -1,18 +1,7 @@
 /** decrypt.js — mendekripsi berkas hasil dan menampilkannya. */
 
 const fs = require("fs");
-const path = require("path");
 const { readEncryptedFrames, parseAesKey } = require("./lib/storage");
-
-const CONFIG_FILE = path.join(__dirname, "config.json");
-
-function loadKey() {
-    if (!fs.existsSync(CONFIG_FILE)) {
-        throw new Error(`config.json tidak ditemukan di ${CONFIG_FILE}`);
-    }
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-    return parseAesKey(cfg.AUDITOR_AES_KEY);
-}
 
 function tampilkan(namaBerkas) {
     if (!fs.existsSync(namaBerkas)) {
@@ -20,22 +9,20 @@ function tampilkan(namaBerkas) {
         return;
     }
     try {
-        const key = loadKey();
-        const records = readEncryptedFrames(namaBerkas, key);
+        const records = readEncryptedFrames(namaBerkas, parseAesKey());
         if (records.length === 0) {
             console.log(`Tidak ada catatan di ${namaBerkas}.`);
             return;
         }
         console.log(`Total ${records.length} catatan di ${namaBerkas}:\n`);
-        records.forEach((reg, i) => {
+        records.forEach((r, i) => {
             console.log(`Catatan ${i + 1}:`);
-            console.log(`  Pola         : ${reg.pattern}`);
-            console.log(`  Strategi     : ${reg.strategy ?? "-"}`);
-            console.log(`  Chain        : ${reg.chain_name ?? reg.chain_id ?? "-"}`);
-            console.log(`  Alamat       : ${reg.address}`);
-            console.log(`  Kunci privat : ${reg.private_key_hex}`);
-            console.log(`  Saldo (wei)  : ${reg.balance_wei}`);
-            console.log(`  Tx terakhir  : ${reg.last_tx_unix ?? "-"}`);
+            console.log(`  Pola         : ${r.pattern}`);
+            console.log(`  Strategi     : ${r.strategy ?? "-"}`);
+            console.log(`  Koin / Chain : ${r.coin ?? "-"} / ${r.chain_name ?? "-"}`);
+            console.log(`  Alamat       : ${r.address}`);
+            console.log(`  Kunci privat : ${r.private_key_hex}`);
+            console.log(`  Saldo        : ${r.balance ?? r.balance_wei ?? "-"}`);
             console.log("-".repeat(40));
         });
     } catch (e) {
@@ -44,8 +31,7 @@ function tampilkan(namaBerkas) {
 }
 
 if (require.main === module) {
-    const target = process.argv[2] || "hallazgos.enc";
-    tampilkan(target);
+    tampilkan(process.argv[2] || "hallazgos.enc");
 }
 
 module.exports = { tampilkan };
