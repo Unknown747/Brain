@@ -4,22 +4,40 @@
  * dan menyimpan semuanya dalam berkas terenkripsi AES-GCM.
  *
  * PENGGUNAAN AMAN:
- * - Tetapkan AUDITOR_AES_KEY sebagai variabel lingkungan (32 byte hex) atau berikan saat memulai.
- * - Jika tidak punya ETHERSCAN_API_KEY biarkan kosong -> skrip tidak akan mengkueri jaringan.
+ * - Simpan AUDITOR_AES_KEY (32 byte hex) di config.json di folder utama proyek.
+ * - Jika tidak punya ETHERSCAN_API_KEY biarkan kosong di config.json -> skrip tidak akan mengkueri jaringan.
+ * - Jangan commit config.json (sudah dimasukkan ke .gitignore).
  */
 
 const fs = require("fs");
+const path = require("path");
 const crypto = require("crypto");
 const readline = require("readline");
-require("dotenv").config();
 
 const { computeAddress } = require("ethers");
 
 // -----------------------
 // Konfigurasi
 // -----------------------
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || null; // opsional
-const AES_KEY_HEX = process.env.AUDITOR_AES_KEY || null; // 64 karakter hex = 32 byte
+const CONFIG_FILE = path.join(__dirname, "config.json");
+
+/** Memuat konfigurasi rahasia dari config.json. */
+function loadConfig() {
+    if (!fs.existsSync(CONFIG_FILE)) {
+        console.warn(`[!] Berkas konfigurasi tidak ditemukan: ${CONFIG_FILE}. Salin config.example.json menjadi config.json dan isi nilainya.`);
+        return {};
+    }
+    try {
+        const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+        return JSON.parse(raw);
+    } catch (e) {
+        throw new Error(`Gagal membaca ${CONFIG_FILE}: ${e.message}`);
+    }
+}
+
+const CONFIG = loadConfig();
+const ETHERSCAN_API_KEY = CONFIG.ETHERSCAN_API_KEY || null; // opsional
+const AES_KEY_HEX = CONFIG.AUDITOR_AES_KEY || null; // 64 karakter hex = 32 byte
 const OUT_FILE = "hallazgos.enc";
 const FOUND_TXT_FILE = "found.txt";
 

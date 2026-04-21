@@ -49,11 +49,14 @@ ethereum-brainwallet-auditor/
    npm install
    ```
 
-4. Buat berkas `.env` di folder utama dengan variabel lingkungan Anda:
-   ```ini
-   AUDITOR_AES_KEY=kunci_AES_256_bit_dalam_64_karakter_heksadesimal
-   ETHERSCAN_API_KEY=kunci_etherscan_api_anda_opsional
+4. Salin `config.example.json` menjadi `config.json` di folder utama, lalu isi nilainya:
+   ```json
+   {
+     "AUDITOR_AES_KEY": "kunci_AES_256_bit_dalam_64_karakter_heksadesimal",
+     "ETHERSCAN_API_KEY": "kunci_etherscan_api_anda_opsional"
+   }
    ```
+   `config.json` sudah ada di `.gitignore` sehingga rahasia tidak terdorong ke repositori.
 
 ---
 

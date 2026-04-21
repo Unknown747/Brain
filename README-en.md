@@ -49,11 +49,14 @@ ethereum-brainwallet-auditor/
    npm install
    ```
 
-4. Create a `.env` file in the root with your environment variables:
-   ```ini
-   AUDITOR_AES_KEY=your_256_bit_AES_key_in_64_hexadecimal_characters
-   ETHERSCAN_API_KEY=your_optional_etherscan_api_key
+4. Copy `config.example.json` to `config.json` in the project root and fill in the values:
+   ```json
+   {
+     "AUDITOR_AES_KEY": "your_256_bit_AES_key_in_64_hexadecimal_characters",
+     "ETHERSCAN_API_KEY": "your_optional_etherscan_api_key"
+   }
    ```
+   `config.json` is listed in `.gitignore` so secrets won't be pushed to the repository.
 
 ---
 
