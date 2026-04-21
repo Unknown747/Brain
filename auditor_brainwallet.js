@@ -24,6 +24,7 @@ const { generateVariants } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
 const { scrapeUrls } = require("./lib/scraper");
 const { COINS, getLimiter } = require("./lib/multicoin");
+const rpcStats = require("./lib/rpcStats");
 
 const CHECKPOINT_FILE = "progress.json";
 
@@ -312,6 +313,7 @@ function finalize(stats, startTime, cumCoinStats) {
     const elapsedSec = (Date.now() - startTime) / 1000;
     stats.speed = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
     logger.coinSummary(cumCoinStats);
+    logger.rpcSummary(rpcStats.snapshot());
     logger.summary(stats, formatDuration(Date.now() - startTime));
     return stats;
 }
