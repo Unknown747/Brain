@@ -87,10 +87,11 @@ lib/logger.js              Logger berwarna + progress bar + ETA + coinSummary
 | `aes.key`         | Kunci AES-256 (auto-generate) | gitignored |
 | `hallazgos.enc`   | Temuan terenkripsi (AES-GCM) | gitignored |
 | `found.txt`       | Temuan plain text, tab-separated | gitignored |
-| `words_cache.txt` | Kata-kata yang sudah pernah di-scrape | gitignored |
+| `.scrape_cache.json` | Kata & frasa yang sudah pernah di-scrape (auto, persisten antar sesi) | gitignored |
 | `progress.json`   | Checkpoint sesi (auto-delete saat selesai) | gitignored |
 
 > Cache alamat hanya di memori — tidak ada file cache alamat yang ditulis ke disk.
+> Cache scrape persisten — token (kata/frasa) yang sudah pernah di-scrape otomatis di-skip pada sesi berikutnya. Hapus `.scrape_cache.json` untuk reset.
 
 ## Workflow
 - `Auditor` — `node index.js`

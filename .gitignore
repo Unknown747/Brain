@@ -27,3 +27,4 @@ Thumbs.db
 .env
 .vscode/
 .idea/
+.scrape_cache.json

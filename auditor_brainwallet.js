@@ -24,6 +24,7 @@ const { generateVariants } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
 const { scrapeUrls } = require("./lib/scraper");
 const { COINS, getLimiter } = require("./lib/multicoin");
+const scrapeCache = require("./lib/scrapeCache");
 const rpcStats = require("./lib/rpcStats");
 
 const CHECKPOINT_FILE = "progress.json";
@@ -240,11 +241,17 @@ async function runAudit(overrides = {}) {
             logger.info(`Intensitas: ${opts.intensity}`);
 
             logger.section("Scraping URL");
+            const cache = scrapeCache.load();
+            const cacheSize = cache.words.size + cache.phrases.size;
+            if (cacheSize > 0) {
+                logger.info(`Cache scrape: ${cache.words.size} kata + ${cache.phrases.size} frasa (akan di-skip)`);
+            }
             logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
-            words = await scrapeUrls(opts.urls);
-            logger.info(`Total kata baru: ${words.length}`);
+            words = await scrapeUrls(opts.urls, cache);
+            scrapeCache.save(cache);
+            logger.info(`Total token baru untuk diaudit: ${words.length}`);
             if (words.length === 0) {
-                logger.warn("Tidak ada kata baru. Berhenti.");
+                logger.warn("Tidak ada token baru (semua sudah pernah di-scrape). Berhenti.");
                 return finalize(stats, startTime, cumCoinStats);
             }
         }
