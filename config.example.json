@@ -8,6 +8,6 @@
   "chunkSize":   1000,
   "concurrency": 5,
   "rateLimit":   5,
-  "batchSize":   20,
+  "batchSize":   100,
   "logLevel":    "info"
 }

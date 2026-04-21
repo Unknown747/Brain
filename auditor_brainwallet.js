@@ -31,7 +31,7 @@ const DEFAULTS = {
     chunkSize:   1000,
     concurrency: 5,
     rateLimit:   5,
-    batchSize:   20,
+    batchSize:   100,
     chains:      [1, 56, 137, 42161],
     coins:       ["eth", "btc", "ltc", "doge", "trx", "sol"],
     strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
