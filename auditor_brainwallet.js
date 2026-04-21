@@ -21,6 +21,7 @@ const { computeAddress } = require("ethers");
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || null; // opsional
 const AES_KEY_HEX = process.env.AUDITOR_AES_KEY || null; // 64 karakter hex = 32 byte
 const OUT_FILE = "hallazgos.enc";
+const FOUND_TXT_FILE = "found.txt";
 
 // -----------------------
 // Utilitas
@@ -110,6 +111,33 @@ function encryptAndWriteRecords(records, outFile, key) {
     const tag = cipher.getAuthTag();
     fs.writeFileSync(outFile, Buffer.concat([nonce, ct, tag]));
     console.log(`[+] Disimpan ${records.length} catatan terenkripsi di ${outFile}`);
+}
+
+/**
+ * Menambahkan catatan ke berkas teks biasa (mode append) agar mudah dibaca manusia.
+ * Setiap catatan ditulis sebagai blok multibaris yang dipisahkan garis pemisah.
+ */
+function appendRecordsToTxt(records, txtFile) {
+    if (!records || records.length === 0) return;
+    const lines = [];
+    for (const r of records) {
+        const tanggalCek = r.checked_at_unix
+            ? new Date(r.checked_at_unix * 1000).toISOString()
+            : "-";
+        const tanggalTx = r.last_tx_unix
+            ? new Date(r.last_tx_unix * 1000).toISOString()
+            : "-";
+        lines.push("=".repeat(60));
+        lines.push(`Pola           : ${r.pattern}`);
+        lines.push(`Alamat         : ${r.address}`);
+        lines.push(`Kunci privat   : ${r.private_key_hex}`);
+        lines.push(`Saldo (wei)    : ${r.balance_wei ?? "-"}`);
+        lines.push(`Transaksi terakhir : ${tanggalTx}`);
+        lines.push(`Diperiksa pada : ${tanggalCek}`);
+    }
+    lines.push("");
+    fs.appendFileSync(txtFile, lines.join("\n"), "utf8");
+    console.log(`[+] Ditambahkan ${records.length} catatan ke ${txtFile}`);
 }
 
 /** Mendekripsi berkas dan mengembalikan daftar catatan. */
@@ -213,6 +241,8 @@ async function runAudit(wordlist, etherscanApiKey, outFile) {
     if (registrosConFondos.length > 0) {
         encryptAndWriteRecords(registrosConFondos, "hallazgos_con_fondos.enc", key);
         console.log(`[+] Disimpan ${registrosConFondos.length} catatan dengan dana di hallazgos_con_fondos.enc`);
+        // Simpan juga versi teks biasa agar mudah dibaca
+        appendRecordsToTxt(registrosConFondos, FOUND_TXT_FILE);
     } else {
         console.log("[*] Tidak ditemukan catatan dengan dana.");
     }
@@ -290,6 +320,7 @@ module.exports = {
     queryEtherscanBalanceAndLastTx,
     getAesKey,
     encryptAndWriteRecords,
+    appendRecordsToTxt,
     decryptFileToRecords,
     generateCandidatesFromWordlist,
     runAudit,
