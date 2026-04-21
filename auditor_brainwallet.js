@@ -80,6 +80,8 @@ async function processBlock(candidates, opts, ctx) {
         const list = perCoin[coin];
         if (list.length === 0) return;
 
+        const t0coin = Date.now();
+
         if (coin === "eth") {
             const byAddr = new Map(list.map((x) => [x.address.toLowerCase(), x]));
             const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
@@ -110,6 +112,9 @@ async function processBlock(candidates, opts, ctx) {
         }
 
         for (const x of list) ctx.cache.add(`${coin}:${x.address.toLowerCase()}`);
+
+        const dtCoin = ((Date.now() - t0coin) / 1000).toFixed(2);
+        logger.coinCheck(coin.toUpperCase(), list.length, dtCoin);
     }));
 
     const totalChecked = Object.values(perCoin).reduce((s, l) => s + l.length, 0);
@@ -145,10 +150,8 @@ async function runAudit(overrides = {}) {
     const aesKey = parseAesKey();
 
     logger.section("Konfigurasi Sesi");
-    logger.info(`Strategi derivasi  : ${opts.strategies.join(", ")}`);
-    logger.info(`Koin dipantau      : ${opts.coins.join(", ")}`);
-    logger.info(`Chain EVM          : ${opts.chains.map(chainName).join(", ")}`);
-    logger.info(`Cache alamat       : hanya memori (tidak disimpan ke file)`);
+    logger.info(`Strategi  : ${opts.strategies.join(", ")}`);
+    logger.info(`Koin      : ${opts.coins.join(", ")}  |  EVM: ${opts.chains.map(chainName).join(", ")}`);
 
     const ctx = {
         aesKey,
