@@ -1,191 +1,219 @@
 <p align="center">Bahasa Indonesia | <a href="./README-en.md">English</a></p>
 
-# Auditor Brainwallet Ethereum
+<p align="center">
+  <img src="assets/runcode.gif" alt="Demo" width="640"/>
+</p>
+
+# Brainwallet Auditor
 
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Security](https://img.shields.io/badge/Security-Audit-red.svg)](https://github.com/features/security)
-[![Blockchain](https://img.shields.io/badge/Blockchain-Ethereum-purple.svg)](https://ethereum.org/)
-[![Crypto](https://img.shields.io/badge/Crypto-AES--GCM-orange.svg)](https://en.wikipedia.org/wiki/AES-GCM)
-
-## 📋 Deskripsi
-
-Proyek ini mengimplementasikan sebuah alat untuk mengaudit frasa lemah bergaya *brainwallet* dan menurunkan kunci privat Ethereum darinya. Skrip ini mengkueri blockchain (melalui Etherscan API) untuk mendeteksi apakah ada kunci yang dihasilkan memiliki aktivitas atau saldo, serta menyimpan hasilnya secara aman dengan enkripsi AES-GCM.
-
-Tujuan utamanya adalah memfasilitasi penelitian keamanan terhadap pola pembuatan kunci yang lemah, sehingga membantu mengidentifikasi kerentanan pada frasa yang umum digunakan.
+[![Security](https://img.shields.io/badge/Tujuan-Riset_Keamanan-red.svg)](#)
+[![Chains](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#)
+[![Coins](https://img.shields.io/badge/Koin-BTC_LTC_DOGE_TRX_SOL-orange.svg)](#)
 
 ---
 
-## 📁 Struktur Proyek
+## Deskripsi
+
+**Brainwallet Auditor** adalah alat riset keamanan untuk mendeteksi dompet kripto yang dibuat dari frasa lemah (*brainwallet*). Alat ini:
+
+1. Mengambil teks dari URL yang diberikan.
+2. Menghasilkan ribuan varian frasa + kombinasi 2 kata (bigram).
+3. Menurunkan private key menggunakan 5 strategi hashing berbeda.
+4. Mengecek saldo di **10 jaringan blockchain** secara paralel.
+5. Menyimpan temuan secara terenkripsi (AES-256-GCM).
+
+> ⚠️ Alat ini dibuat semata-mata untuk tujuan edukasi dan penelitian keamanan.
+
+---
+
+## Fitur
+
+| Fitur | Detail |
+|---|---|
+| **Scraping otomatis** | Ambil & tokenisasi teks dari URL mana pun |
+| **Varian kandidat** | Lowercase, uppercase, capitalize, suffix `!`, `123`, `1`, `2024`, bigram |
+| **5 strategi hashing** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lowercase) |
+| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (dapat dikonfigurasi) |
+| **Multi-koin** | BTC, LTC, DOGE, TRX, SOL |
+| **Retry otomatis** | Exponential backoff saat API gagal (maks 3x) |
+| **Pengecekan paralel** | Semua koin & chain dicek bersamaan |
+| **Kecepatan & ETA** | Ditampilkan secara live di terminal |
+| **Cache in-memory** | Alamat tidak disimpan ke file — setiap sesi mulai bersih |
+| **Enkripsi temuan** | Hasil disimpan dengan AES-256-GCM |
+| **Notifikasi bell** | Terminal berbunyi otomatis saat wallet berdana ditemukan |
+
+---
+
+## Struktur Proyek
 
 ```
-ethereum-brainwallet-auditor/
-├── index.js                 # Titik masuk (entry point) aplikasi
-├── auditor_brainwallet.js   # Modul utama berisi logika audit brainwallet
-├── decrypt.js               # Skrip bantu untuk mendekripsi berkas hasil
-├── config.json              # Konfigurasi rahasia lokal (TIDAK di-commit)
-├── config.example.json      # Template konfigurasi
-├── AES_key.txt              # Berkas berisi kunci AES untuk enkripsi/dekripsi
-├── rockyou.txt              # Kamus kata sandi umum (133 MB, opsional)
-├── hallazgos.enc            # Hasil audit terenkripsi
-├── package.json             # Konfigurasi dependensi proyek
-├── assets/                  # Folder sumber daya multimedia
-│   └── runcode.gif          # GIF yang menunjukkan eksekusi kode
-├── README.md                # Dokumentasi Bahasa Indonesia (berkas ini)
+brainwallet-auditor/
+├── index.js                 # Entry point CLI
+├── auditor_brainwallet.js   # Orkestrator utama
+├── decrypt.js               # Dekripsi hallazgos.enc
+├── aes.key                  # Kunci AES-256 (64 karakter hex, dibuat otomatis)
+├── hallazgos.enc            # Temuan terenkripsi
+├── found.txt                # Temuan plain text
+├── lib/
+│   ├── candidates.js        # Generator varian frasa & bigram
+│   ├── derive.js            # 5 strategi derivasi private key
+│   ├── etherscan.js         # Pengecekan saldo EVM multi-chain via RPC
+│   ├── logger.js            # Tampilan terminal berwarna + progress + ETA
+│   ├── multicoin.js         # Pengecekan saldo BTC/LTC/DOGE/TRX/SOL
+│   ├── scraper.js           # Scraping & tokenisasi teks dari URL
+│   ├── storage.js           # Enkripsi AES-GCM & penyimpanan temuan
+│   └── util.js              # Rate limiter, concurrency, retry, format waktu
+├── package.json
+├── README.md                # Dokumentasi Bahasa Indonesia
 └── README-en.md             # Dokumentasi Bahasa Inggris
 ```
 
 ---
 
-## 🚀 Instalasi
+## Instalasi
 
-1. Klon repositori ini:
-   ```bash
-   git clone https://github.com/Unknown747/Brain.git
-   cd Brain
-   ```
+```bash
+# 1. Klon repositori
+git clone https://github.com/Unknown747/Brain.git
+cd Brain
 
-2. Pastikan Node.js 20+ terpasang.
+# 2. Pastikan Node.js 20+ terpasang
+node --version
 
-3. Pasang dependensi:
-   ```bash
-   npm install
-   ```
+# 3. Pasang dependensi
+npm install
+```
 
-4. Salin `config.example.json` menjadi `config.json` di folder utama, lalu isi nilainya:
-   ```json
-   {
-     "AUDITOR_AES_KEY": "kunci_AES_256_bit_dalam_64_karakter_heksadesimal",
-     "ETHERSCAN_API_KEY": "kunci_etherscan_api_anda_opsional"
-   }
-   ```
-   `config.json` sudah ada di `.gitignore` sehingga rahasia tidak terdorong ke repositori.
+Kunci AES akan dibuat otomatis di `aes.key` saat pertama kali dijalankan. **Simpan file ini baik-baik** — diperlukan untuk mendekripsi `hallazgos.enc`.
 
 ---
 
-## 💻 Penggunaan
+## Penggunaan
 
-1. Unduh kamus frasa (contohnya `rockyou.txt`) dan letakkan di folder proyek.
+```bash
+node index.js
+# atau
+npm start
+```
 
-2. Jalankan skrip utama:
-   ```bash
-   node index.js
-   # atau
-   npm start
-   ```
+Program akan meminta satu atau lebih URL:
 
-Program akan memproses kamus dalam blok berisi 1000 frasa, menghasilkan varian, menurunkan kunci privat, mengkueri blockchain, dan menyimpan:
+```
+══════════════════════════════════════════════════════
+   BRAINWALLET AUDITOR   security research tool
+══════════════════════════════════════════════════════
 
-- `hallazgos.enc` → seluruh hasil terenkripsi.
-- `hallazgos_con_fondos.enc` → hanya hasil dengan saldo positif terenkripsi.
+  Masukkan satu atau lebih URL untuk di-scrape.
+  Pisahkan dengan koma jika lebih dari satu.
+  Contoh: https://en.wikipedia.org/wiki/Bitcoin
 
-Eksekusi akan menunggu 5 detik antar blok agar tidak membebani API.
+  URL > https://en.wikipedia.org/wiki/Bitcoin
+```
 
-### 🔄 Pelacak Progres
+### Opsi CLI
 
-Kode menyertakan sistem pelacakan progres yang memungkinkan Anda melanjutkan audit dari titik terakhir:
+```bash
+# Batasi koin yang dicek
+node index.js --coins=eth,btc
 
-**Cara kerjanya:**
-- `progress.txt` menyimpan nomor blok 1000-kata terakhir yang diproses.
-- Saat memulai, skrip membaca nomor itu dan melewati semua blok sebelumnya.
-- Setiap kali sebuah blok selesai, indeks berikutnya disimpan ke `progress.txt`.
-- Jika proses dihentikan atau komputer mati, saat dijalankan kembali audit akan melanjutkan dari titik tersebut.
+# Batasi chain EVM (chain ID dipisah koma)
+# 1=Ethereum  56=BNB Chain  137=Polygon  42161=Arbitrum
+node index.js --coins=eth --chains=1,56
+```
 
----
+### Dekripsi Hasil
 
-## 🧠 Landasan Teori: Apakah mungkin menemukan alamat dengan dana?
-
-Secara teori, ya itu mungkin, tetapi dalam praktiknya probabilitasnya sangat, hampir absurd, kecil bila kita bicara tentang alamat yang dihasilkan secara acak.
-
-Alasannya:
-
-### 1️⃣ Ruang Kunci Privat Ethereum
-Sebuah kunci privat adalah angka 256-bit.
-Artinya ada 2^256 kemungkinan kombinasi, yaitu:
-≈ 1,1579 × 10^77 kemungkinan kunci
-(angka yang sangat besar, lebih besar dari perkiraan jumlah atom di alam semesta yang teramati).
-
-### 2️⃣ Brainwallet dan Pola Lemah
-Satu-satunya alasan skrip seperti ini pernah menemukan alamat berdana di masa lalu adalah karena:
-- Sebagian orang menggunakan kata sandi sederhana (mis. "password", "123456", "letmein") sebagai frasa benih untuk menurunkan kunci privatnya.
-- Kunci-kunci tersebut dapat diprediksi dan kemungkinan ada di kamus seperti `rockyou.txt`.
-- Hal ini secara drastis mengecilkan ruang pencarian (alih-alih 2^256, mungkin hanya beberapa juta).
-
-**Contoh nyata:**
-Frasa benih "password123" → kunci privat deterministik → alamat yang pernah dipakai seseorang → dana yang terdeteksi.
-
-### 3️⃣ Probabilitas Sebenarnya
-- **Kunci sepenuhnya acak** → probabilitas sukses ≈ 0.
-- **Kunci dari kamus kata sandi lemah** → probabilitas > 0, tapi tetap sangat rendah.
-
-Itulah sebabnya skrip biasanya berfokus pada brainwallet atau kunci lemah, bukan seluruh ruang kemungkinan.
+```bash
+node decrypt.js
+# atau
+npm run decrypt
+```
 
 ---
 
-## ⚠️ Apa itu Brainwallet dan kenapa rentan?
+## Alur Kerja
 
-Sebuah *brainwallet* adalah teknik untuk menghasilkan kunci privat kriptografis dari sebuah frasa atau kata sandi yang dihafal (sebuah "frasa benih"), umumnya menggunakan hash (seperti SHA-256). Idenya adalah pengguna tidak perlu menyimpan kunci privat yang panjang dan kompleks, cukup mengingat sebuah frasa sederhana.
-
-**Namun, kesederhanaan itu bisa berisiko:**
-
-- Banyak orang memakai frasa umum, kata sederhana, atau pola yang dapat diprediksi (tanggal, nama, kombinasi umum).
-- Penyerang dapat memakai kamus dan algoritma untuk membangkitkan ribuan atau jutaan frasa yang mungkin dan menghitung kunci privat turunannya.
-- Kemudian mereka mengkueri blockchain untuk mendeteksi apakah ada kunci tersebut yang punya dana atau aktivitas, lalu mencurinya.
-
-Itulah sebabnya brainwallet berbasis frasa lemah sangat tidak aman dan telah menjadi sumber kerugian besar di masa lalu.
-
-Proyek ini mensimulasikan audit semacam itu untuk mendeteksi kerentanan tersebut sekaligus mengedukasi pentingnya menggunakan frasa yang benar-benar acak dan aman.
-
----
-
-## 🎯 Masalah yang dipecahkan
-
-Banyak orang memakai frasa lemah atau pola sederhana untuk menghasilkan kunci privatnya (brainwallet), yang dapat dieksploitasi penyerang untuk mencuri dana. Alat ini membantu untuk:
-
-- Mengidentifikasi pola tidak aman pada kunci yang diturunkan dari frasa lemah.
-- Mendeteksi kunci aktif yang memiliki saldo di blockchain.
-- Menjaga keamanan data sensitif melalui enkripsi.
-
----
-
-## 🔧 Pendekatan dan solusi
-
-- **Pembangkitan kandidat** berbasis daftar kata umum dan varian sederhana (leet speak, akhiran numerik).
-- **Penurunan kunci privat** menggunakan SHA-256 atas frasa (brainwallet).
-- **Kueri Etherscan** untuk memperoleh saldo dan tanggal transaksi terakhir.
-- **Penyimpanan terenkripsi** untuk seluruh catatan dan penyaringan tambahan untuk kunci dengan saldo.
-- **Pemrosesan per blok** untuk penanganan yang efisien dan kontrol laju kueri.
+```
+URL Input
+   │
+   ▼
+Scraping & Tokenisasi
+   │  (hapus HTML, ambil kata unik 3–40 karakter)
+   ▼
+Generate Varian + Bigram
+   │  (lowercase, uppercase, capitalize, suffix, 2-kata)
+   ▼
+Derivasi Private Key  ──── 5 strategi hashing
+   │
+   ▼
+Cek Saldo Paralel
+   ├── EVM  → Ethereum, BNB Chain, Polygon, Arbitrum  (RPC publik)
+   ├── BTC  → blockchain.info
+   ├── LTC  → Blockchair
+   ├── DOGE → Blockchair
+   ├── TRX  → TronGrid
+   └── SOL  → Solana RPC publik
+   │
+   ▼
+Temuan → hallazgos.enc (enkripsi) + found.txt (plain)
+         + notifikasi bell terminal
+```
 
 ---
 
-## 🚀 Peningkatan masa depan / ⚠️ Keterbatasan
+## Konfigurasi Default
 
-### 🚀 **Peningkatan masa depan:**
-- 🔗 **Dukungan multi-blockchain**: Memperluas ke jenis dompet atau blockchain lain.
-- 🗄️ **Basis data**: Mengimplementasikan basis data untuk menangani volume besar secara efisien.
-- ⚡ **Kueri paralel**: Optimasi kueri paralel tanpa melebihi batas API.
-- 🖥️ **Antarmuka grafis**: Pengembangan antarmuka grafis atau web untuk visualisasi hasil.
-- 🧠 **Heuristik lanjutan**: Algoritma yang lebih canggih untuk pembangkitan frasa.
-
-### ⚠️ **Keterbatasan saat ini:**
-- 🌐 **Ketergantungan API**: Tergantung pada ketersediaan dan batas Etherscan API.
-- 📊 **Manajemen sumber daya**: Pembangkitan kamus dan varian harus digunakan dengan hati-hati agar tidak menjenuhkan sumber daya.
-- 🎯 **Cakupan terbatas**: Tidak menjamin menemukan semua frasa lemah yang mungkin, hanya yang berbasis pola sederhana.
+| Parameter | Nilai Default | Keterangan |
+|---|---|---|
+| `chunkSize` | 1000 | Kata per blok |
+| `concurrency` | 5 | Permintaan paralel |
+| `rateLimit` | 5 | Request/detik (EVM) |
+| `batchSize` | 20 | Alamat per batch EVM |
+| `chains` | 1, 56, 137, 42161 | ETH, BNB, Polygon, Arbitrum |
+| `coins` | eth, btc, ltc, doge, trx, sol | Semua koin |
+| `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower | Semua strategi |
 
 ---
 
-## 📋 Persyaratan
+## Tampilan Terminal
 
-- 🟢 **Node.js 20+**
-- 📦 **Dependensi** yang tercantum di `package.json` (`ethers`, `dotenv`)
-- 🔑 **Kunci AES** sepanjang 256 bit (64 karakter heksadesimal)
-- 🌐 **Etherscan API Key** (opsional)
-- 📚 **Kamus kata sandi** (mis. `rockyou.txt` - 133 MB)
+```
+14:05:01 [INF] Strategi  : sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower
+14:05:01 [INF] Koin      : eth, btc, ltc, doge, trx, sol
+14:05:01 [INF] EVM Chain : Ethereum, BNB Chain, Polygon, Arbitrum
 
-## 🔒 Keamanan
+14:05:03 [CHK] ETH  │ alamat:320 │ waktu: 1.42s
+14:05:03 [CHK] BTC  │ alamat:320 │ waktu: 0.98s
+14:05:04 [BLK] 1/3 ████████░░░░░░░░ 33% │ kandidat:1800 │ diperiksa:960 │ temuan:0 │ 145/s │ ETA:12d (7.2d)
+```
 
-⚠️ **PERINGATAN**: Alat ini dirancang semata-mata untuk tujuan edukasi dan penelitian keamanan. Gunakan hanya di lingkungan terkontrol dan dengan otorisasi yang sesuai.
+---
 
-- Kunci privat yang dihasilkan disimpan terenkripsi secara lokal
-- Tidak ada data sensitif yang dikirim ke server eksternal
-- Disarankan menggunakan pada mesin yang terisolasi untuk keamanan lebih
+## Landasan Teori
+
+Brainwallet adalah teknik menghasilkan private key dari frasa yang dihafal (biasanya di-hash dengan SHA-256). Kelemahannya: jika frasa mudah ditebak, private key-nya pun dapat ditemukan.
+
+- Ruang private key Ethereum: **2²⁵⁶** kemungkinan (~10⁷⁷)
+- Private key acak: probabilitas sukses ≈ 0
+- Brainwallet dari kata umum: probabilitas > 0, dan itulah yang diaudit alat ini
+
+Proyek ini mensimulasikan audit tersebut untuk keperluan riset keamanan.
+
+---
+
+## Persyaratan
+
+- **Node.js 20+**
+- Koneksi internet (untuk API publik blockchain)
+- File `aes.key` (dibuat otomatis jika belum ada)
+
+---
+
+## Keamanan
+
+- Private key yang ditemukan disimpan **terenkripsi lokal** (AES-256-GCM)
+- Tidak ada data sensitif yang dikirim ke server pihak ketiga
+- Cache alamat hanya ada di memori — tidak ditulis ke disk
+- Gunakan hanya di lingkungan terkontrol dan dengan otorisasi yang sesuai

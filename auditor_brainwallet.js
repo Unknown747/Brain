@@ -3,13 +3,13 @@
  *
  * Alur:
  *  1. Scrape kata-kata dari URL.
- *  2. Hasilkan kandidat (varian huruf besar/kecil, suffix, dll).
- *  3. Derivasi private key dengan beberapa strategi.
- *  4. Cek saldo di banyak koin secara paralel (EVM + BTC/LTC/DOGE/TRX/SOL).
- *  5. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
+ *  2. Hasilkan kandidat + bigram (varian huruf besar/kecil, suffix, kombinasi 2 kata).
+ *  3. Derivasi private key dengan semua strategi (sha256, doubleSha256, keccak256, dll).
+ *  4. Cek saldo di banyak koin & chain secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/TRX/SOL).
+ *  5. Retry otomatis saat API gagal (exponential backoff).
+ *  6. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
  *
  * Cache alamat hanya disimpan di memori selama sesi berjalan.
- * Tidak ada file cache yang dibaca atau ditulis.
  */
 
 const logger = require("./lib/logger");
@@ -26,9 +26,11 @@ const DEFAULTS = {
     concurrency: 5,
     rateLimit:   5,
     batchSize:   20,
-    chains:      [1],
+    // Semua chain EVM yang didukung diaktifkan secara default
+    chains:      [1, 56, 137, 42161],
     coins:       ["eth", "btc", "ltc", "doge", "trx", "sol"],
-    strategies:  ["sha256"],
+    // Semua strategi derivasi diaktifkan secara default
+    strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower"],
     logLevel:    "info",
     outFile:     "hallazgos.enc",
     foundFile:   "found.txt",
@@ -83,7 +85,7 @@ async function processBlock(candidates, opts, ctx) {
         const t0coin = Date.now();
 
         if (coin === "eth") {
-            const byAddr = new Map(list.map((x) => [x.address.toLowerCase(), x]));
+            const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
             const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
             for (const chainId of opts.chains) {
                 const tasks = batches.map((batch) => async () => {
@@ -101,7 +103,7 @@ async function processBlock(candidates, opts, ctx) {
         } else {
             try {
                 const balances = await COINS[coin].balance(list.map((x) => x.address), getLimiter(coin));
-                const byAddr = new Map(list.map((x) => [x.address, x]));
+                const byAddr   = new Map(list.map((x) => [x.address, x]));
                 for (const [addr, bal] of balances.entries()) {
                     if (bal > 0n) {
                         const o = byAddr.get(addr);
@@ -152,6 +154,7 @@ async function runAudit(overrides = {}) {
     logger.section("Konfigurasi Sesi");
     logger.info(`Strategi  : ${opts.strategies.join(", ")}`);
     logger.info(`Koin      : ${opts.coins.join(", ")}`);
+    logger.info(`EVM Chain : ${opts.chains.map(chainName).join(", ")}`);
 
     const ctx = {
         aesKey,
@@ -159,8 +162,9 @@ async function runAudit(overrides = {}) {
         cache:   new AddressCache(),
     };
 
-    const startTime = Date.now();
-    const stats = { blocks: 0, fresh: 0, found: 0, candidates: 0 };
+    const startTime  = Date.now();
+    const blockTimes = [];
+    const stats      = { blocks: 0, fresh: 0, found: 0, candidates: 0, speed: 0 };
 
     try {
         logger.section("Scraping URL");
@@ -178,12 +182,28 @@ async function runAudit(overrides = {}) {
             const candidates = generateVariants(chunks[i]);
             const t0 = Date.now();
             const r  = await processBlock(candidates, opts, ctx);
-            const dt = ((Date.now() - t0) / 1000).toFixed(1);
+            const dt = Date.now() - t0;
+            blockTimes.push(dt);
+
             stats.blocks++;
             stats.fresh      += r.fresh;
             stats.found      += r.found;
             stats.candidates += candidates.length;
-            logger.progress(i + 1, chunks.length, candidates.length, r.fresh, r.found, dt);
+
+            // Kecepatan & ETA
+            const elapsedSec  = (Date.now() - startTime) / 1000;
+            const speed       = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
+            const avgBlockMs  = blockTimes.reduce((a, b) => a + b, 0) / blockTimes.length;
+            const remaining   = chunks.length - (i + 1);
+            const etaStr      = remaining > 0 ? formatDuration(remaining * avgBlockMs) : "selesai";
+
+            stats.speed = speed;
+            logger.progress(
+                i + 1, chunks.length, candidates.length,
+                r.fresh, stats.found,
+                (dt / 1000).toFixed(1),
+                speed, etaStr
+            );
         }
     } finally {
         ctx.cache.close();
@@ -193,6 +213,8 @@ async function runAudit(overrides = {}) {
 }
 
 function finalize(stats, startTime) {
+    const elapsedSec = (Date.now() - startTime) / 1000;
+    stats.speed = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
     logger.summary(stats, formatDuration(Date.now() - startTime));
     return stats;
 }
