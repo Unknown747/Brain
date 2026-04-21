@@ -2,3 +2,7 @@ requests
 eth-account
 cryptography
 python-dotenv
+cryptography
+eth-account
+python-dotenv
+requests
