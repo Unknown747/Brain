@@ -11,6 +11,7 @@
  */
 
 const readline = require("readline");
+const logger   = require("./lib/logger");
 const { runAudit } = require("./auditor_brainwallet");
 
 function parseArgs(argv) {
@@ -39,19 +40,29 @@ function prompt(question) {
 
 async function askUrls() {
     if (!process.stdin.isTTY) {
-        console.error("[!] Tidak bisa minta URL (stdin bukan TTY).");
+        logger.error("Tidak bisa minta URL (stdin bukan TTY).");
         process.exit(1);
     }
-    console.log("==================================================");
-    console.log(" Brainwallet Auditor");
-    console.log("==================================================");
-    console.log(" Masukkan URL untuk diambil teksnya & dijadikan brainwallet.");
-    console.log(" Bisa lebih dari satu, pisahkan dengan koma.");
-    console.log(" Contoh: https://en.wikipedia.org/wiki/Bitcoin");
-    console.log("");
-    const answer = (await prompt("URL > ")).trim();
+
+    logger.banner();
+
+    const C = {
+        reset:  "\x1b[0m",
+        cyan:   "\x1b[36m",
+        gray:   "\x1b[90m",
+        bold:   "\x1b[1m",
+        white:  "\x1b[97m",
+        yellow: "\x1b[33m",
+    };
+
+    process.stdout.write(`  ${C.gray}Masukkan satu atau lebih URL untuk di-scrape.${C.reset}\n`);
+    process.stdout.write(`  ${C.gray}Pisahkan dengan koma jika lebih dari satu.${C.reset}\n`);
+    process.stdout.write(`  ${C.gray}Contoh:${C.reset} ${C.cyan}https://en.wikipedia.org/wiki/Bitcoin${C.reset}\n\n`);
+    process.stdout.write(`  ${C.yellow}Catatan:${C.reset} ${C.gray}Cache alamat tidak disimpan — setiap sesi dimulai dari awal.${C.reset}\n\n`);
+
+    const answer = (await prompt(`  \x1b[36m\x1b[1mURL\x1b[0m > `)).trim();
     if (!answer) {
-        console.error("[!] URL kosong, keluar.");
+        logger.error("URL kosong, keluar.");
         process.exit(1);
     }
     return answer.split(",").map((s) => s.trim()).filter(Boolean);
@@ -69,6 +80,6 @@ async function main() {
 }
 
 main().catch((err) => {
-    console.error("[!] Galat fatal:", err.message);
+    logger.error("Galat fatal:", err.message);
     process.exit(1);
 });

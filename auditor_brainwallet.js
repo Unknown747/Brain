@@ -7,6 +7,9 @@
  *  3. Derivasi private key dengan beberapa strategi.
  *  4. Cek saldo di banyak koin secara paralel (EVM + BTC/LTC/DOGE/TRX/SOL).
  *  5. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
+ *
+ * Cache alamat hanya disimpan di memori selama sesi berjalan.
+ * Tidak ada file cache yang dibaca atau ditulis.
  */
 
 const logger = require("./lib/logger");
@@ -19,17 +22,16 @@ const { scrapeUrls } = require("./lib/scraper");
 const { COINS, getLimiter } = require("./lib/multicoin");
 
 const DEFAULTS = {
-    chunkSize: 1000,
+    chunkSize:   1000,
     concurrency: 5,
-    rateLimit: 5,
-    batchSize: 20,
-    chains: [1],
-    coins: ["eth", "btc", "ltc", "doge", "trx", "sol"],
-    strategies: ["sha256"],
-    logLevel: "info",
-    outFile: "hallazgos.enc",
-    foundFile: "found.txt",
-    cacheFile: "cache.txt",
+    rateLimit:   5,
+    batchSize:   20,
+    chains:      [1],
+    coins:       ["eth", "btc", "ltc", "doge", "trx", "sol"],
+    strategies:  ["sha256"],
+    logLevel:    "info",
+    outFile:     "hallazgos.enc",
+    foundFile:   "found.txt",
 };
 
 function buildOptions(overrides = {}) {
@@ -58,7 +60,6 @@ async function processBlock(candidates, opts, ctx) {
 
     const enabledCoins = opts.coins.filter((c) => c === "eth" || COINS[c]);
 
-    // Build daftar alamat per koin (dedupe + filter cache)
     const perCoin = {};
     for (const coin of enabledCoins) {
         perCoin[coin] = [];
@@ -74,7 +75,6 @@ async function processBlock(candidates, opts, ctx) {
         }
     }
 
-    // Cek saldo semua koin paralel
     const allFound = [];
     await Promise.all(enabledCoins.map(async (coin) => {
         const list = perCoin[coin];
@@ -116,21 +116,19 @@ async function processBlock(candidates, opts, ctx) {
 
     if (allFound.length > 0) {
         const records = allFound.map((f) => ({
-            pattern: f.phrase,
-            strategy: f.strategy,
-            coin: f.coin,
-            chain_name: f.chainName,
+            pattern:         f.phrase,
+            strategy:        f.strategy,
+            coin:            f.coin,
+            chain_name:      f.chainName,
             private_key_hex: f.privHex,
-            address: f.address,
-            balance: f.balance,
+            address:         f.address,
+            balance:         f.balance,
             checked_at_unix: Math.floor(Date.now() / 1000),
         }));
         appendEncryptedFrame(records, opts.outFile, ctx.aesKey);
         appendFoundTxt(records, opts.foundFile);
-        logger.success(`DITEMUKAN ${records.length} alamat berdana! Disimpan ke ${opts.outFile} & ${opts.foundFile}`);
-        for (const r of records) {
-            logger.success(`  [${r.chain_name}] ${r.address}  saldo=${r.balance}  pola="${r.pattern}" (${r.strategy})`);
-        }
+        for (const r of records) logger.found(r);
+        logger.success(`${records.length} alamat berdana disimpan ke ${opts.outFile} & ${opts.foundFile}`);
     }
 
     return { derived: derived.length, fresh: totalChecked, found: allFound.length };
@@ -146,20 +144,23 @@ async function runAudit(overrides = {}) {
 
     const aesKey = parseAesKey();
 
-    logger.info(`Strategi derivasi : ${opts.strategies.join(", ")}`);
-    logger.info(`Koin dipantau     : ${opts.coins.join(", ")}`);
-    logger.info(`Chain EVM         : ${opts.chains.map(chainName).join(", ")}`);
+    logger.section("Konfigurasi Sesi");
+    logger.info(`Strategi derivasi  : ${opts.strategies.join(", ")}`);
+    logger.info(`Koin dipantau      : ${opts.coins.join(", ")}`);
+    logger.info(`Chain EVM          : ${opts.chains.map(chainName).join(", ")}`);
+    logger.info(`Cache alamat       : hanya memori (tidak disimpan ke file)`);
 
     const ctx = {
         aesKey,
         limiter: createRateLimiter(opts.rateLimit),
-        cache: new AddressCache(opts.cacheFile),
+        cache:   new AddressCache(),
     };
 
     const startTime = Date.now();
     const stats = { blocks: 0, fresh: 0, found: 0, candidates: 0 };
 
     try {
+        logger.section("Scraping URL");
         logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
         const words = await scrapeUrls(opts.urls);
         logger.info(`Total kata baru dari URL: ${words.length}`);
@@ -168,15 +169,18 @@ async function runAudit(overrides = {}) {
             return finalize(stats, startTime);
         }
 
+        logger.section("Proses Audit");
         const chunks = chunkArray(words, opts.chunkSize);
         for (let i = 0; i < chunks.length; i++) {
             const candidates = generateVariants(chunks[i]);
             const t0 = Date.now();
-            const r = await processBlock(candidates, opts, ctx);
-            const dt = (Date.now() - t0) / 1000;
-            stats.blocks++; stats.fresh += r.fresh; stats.found += r.found;
+            const r  = await processBlock(candidates, opts, ctx);
+            const dt = ((Date.now() - t0) / 1000).toFixed(1);
+            stats.blocks++;
+            stats.fresh      += r.fresh;
+            stats.found      += r.found;
             stats.candidates += candidates.length;
-            logger.info(`Blok #${i + 1}/${chunks.length}: ${candidates.length} kandidat, ${r.fresh} alamat baru, ${r.found} temuan (${dt.toFixed(1)}d)`);
+            logger.progress(i + 1, chunks.length, candidates.length, r.fresh, r.found, dt);
         }
     } finally {
         ctx.cache.close();
@@ -186,10 +190,7 @@ async function runAudit(overrides = {}) {
 }
 
 function finalize(stats, startTime) {
-    logger.success(
-        `Audit selesai dalam ${formatDuration(Date.now() - startTime)}. ` +
-        `Blok=${stats.blocks}, kandidat=${stats.candidates}, alamat baru=${stats.fresh}, temuan=${stats.found}.`
-    );
+    logger.summary(stats, formatDuration(Date.now() - startTime));
     return stats;
 }
 
