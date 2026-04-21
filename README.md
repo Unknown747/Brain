@@ -41,8 +41,8 @@ ethereum-brainwallet-auditor/
 
 1. Klon repositori ini:
    ```bash
-   git clone https://github.com/tu_usuario/ethereum-brainwallet-auditor.git
-   cd ethereum-brainwallet-auditor
+   git clone https://github.com/Unknown747/Brain.git
+   cd Brain
    ```
 
 2. Pastikan Node.js 20+ terpasang.
