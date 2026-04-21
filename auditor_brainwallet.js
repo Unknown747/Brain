@@ -20,6 +20,7 @@ const { deriveAll } = require("./lib/derive");
 const { generateCandidatesFromWordlist, readChunks, countLines } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
 const { scrapeUrls } = require("./lib/scraper");
+const { COINS, getLimiter } = require("./lib/multicoin");
 
 const CONFIG_FILE = path.join(__dirname, "config.json");
 
@@ -29,6 +30,7 @@ const DEFAULTS = {
     concurrency: 5,
     rateLimit: 5,
     chains: [1],
+    coins: ["eth", "btc", "ltc", "doge", "trx", "sol"],
     strategies: ["sha256"],
     logLevel: "info",
     outFile: "hallazgos.enc",
@@ -65,6 +67,9 @@ function buildOptions(overrides = {}) {
     if (typeof merged.strategies === "string") {
         merged.strategies = merged.strategies.split(",").map((s) => s.trim()).filter(Boolean);
     }
+    if (typeof merged.coins === "string") {
+        merged.coins = merged.coins.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    }
     return merged;
 }
 
@@ -81,95 +86,98 @@ function buildOptions(overrides = {}) {
  *  5. Simpan temuan terenkripsi + teks
  */
 async function processBlock(candidates, opts, ctx) {
-    // 1. Derivasi
+    // 1. Derivasi private key (dan alamat EVM bawaan)
     const derived = [];
     for (const phrase of candidates) {
-        for (const d of deriveAll(phrase, opts.strategies)) {
-            derived.push(d);
-        }
+        for (const d of deriveAll(phrase, opts.strategies)) derived.push(d);
     }
+    if (derived.length === 0) return { derived: 0, fresh: 0, found: 0 };
 
-    // 2. Filter cache (dedupe per address)
-    const seen = new Set();
-    const fresh = [];
-    let cached = 0;
-    for (const d of derived) {
-        const a = d.address.toLowerCase();
-        if (ctx.cache.has(a) || seen.has(a)) {
-            cached++;
-            continue;
-        }
-        seen.add(a);
-        fresh.push(d);
-    }
+    const enabledCoins = (opts.coins || ["eth"]).filter((c) => c === "eth" || COINS[c]);
 
-    if (fresh.length === 0) {
-        logger.debug(`Blok diproses, semua alamat sudah ada di cache (${cached}).`);
-        return { derived: derived.length, fresh: 0, found: 0 };
-    }
-
-    // 3. Batch & kueri per chain
-    const byAddress = new Map();
-    for (const d of fresh) byAddress.set(d.address.toLowerCase(), d);
-
-    const batches = chunkArray(fresh.map((d) => d.address), opts.batchSize);
-    const allFound = [];
-
-    for (const chainId of opts.chains) {
-        const tasks = batches.map((batch) => async () => {
+    // 2. Build daftar alamat per koin (dedupe + cache filter)
+    const perCoin = {}; // coin -> [{phrase, strategy, privHex, address}]
+    for (const coin of enabledCoins) {
+        perCoin[coin] = [];
+        const seen = new Set();
+        for (const d of derived) {
+            let addr;
             try {
-                return await balanceMulti(chainId, batch, opts.apiKey, ctx.limiter);
-            } catch (e) {
-                logger.warn(`balancemulti ${chainName(chainId)}: ${e.message}`);
-                return new Map();
-            }
-        });
-        const maps = await runWithConcurrency(tasks, opts.concurrency);
+                addr = coin === "eth" ? d.address : COINS[coin].derive(d.privHex);
+            } catch { continue; }
+            const key = `${coin}:${addr.toLowerCase()}`;
+            if (ctx.cache.has(key) || seen.has(key)) continue;
+            seen.add(key);
+            perCoin[coin].push({ ...d, address: addr });
+        }
+    }
 
-        for (const m of maps) {
-            for (const [addr, balance] of m.entries()) {
-                if (balance > 0n) {
-                    const orig = byAddress.get(addr);
-                    if (orig) {
-                        allFound.push({ ...orig, chainId, balance: balance.toString() });
+    // 3. Cek saldo semua koin secara PARALEL (waktu = koin paling lambat, bukan jumlah)
+    const allFound = [];
+    const coinTasks = enabledCoins.map(async (coin) => {
+        const list = perCoin[coin];
+        if (list.length === 0) return;
+
+        if (coin === "eth") {
+            const byAddr = new Map(list.map((x) => [x.address.toLowerCase(), x]));
+            const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
+            for (const chainId of opts.chains) {
+                const tasks = batches.map((batch) => async () => {
+                    try { return await balanceMulti(chainId, batch, opts.apiKey, ctx.limiter); }
+                    catch (e) { logger.warn(`evm ${chainName(chainId)}: ${e.message}`); return new Map(); }
+                });
+                const maps = await runWithConcurrency(tasks, opts.concurrency);
+                for (const m of maps) {
+                    for (const [addr, bal] of m.entries()) {
+                        if (bal > 0n) {
+                            const o = byAddr.get(addr);
+                            if (o) allFound.push({ ...o, coin: "eth", chainName: chainName(chainId), balance: bal.toString() });
+                        }
                     }
                 }
             }
+        } else {
+            try {
+                const limiter = getLimiter(coin);
+                const balances = await COINS[coin].balance(list.map((x) => x.address), limiter);
+                const byAddr = new Map(list.map((x) => [x.address, x]));
+                for (const [addr, bal] of balances.entries()) {
+                    if (bal > 0n) {
+                        const o = byAddr.get(addr);
+                        if (o) allFound.push({ ...o, coin, chainName: COINS[coin].name, balance: bal.toString() });
+                    }
+                }
+            } catch (e) { logger.warn(`${coin}: ${e.message}`); }
         }
-    }
 
-    // 4. Untuk temuan, ambil tx terakhir
+        // tandai semua alamat coin ini sebagai sudah dicek
+        for (const x of list) ctx.cache.add(`${coin}:${x.address.toLowerCase()}`);
+    });
+    await Promise.all(coinTasks);
+
+    const totalChecked = Object.values(perCoin).reduce((s, l) => s + l.length, 0);
+
+    // 4. Simpan temuan
     if (allFound.length > 0) {
-        const txTasks = allFound.map((f) => async () => {
-            f.lastTx = await lastTxTimestamp(f.chainId, f.address, opts.apiKey, ctx.limiter);
-        });
-        await runWithConcurrency(txTasks, opts.concurrency);
-
-        // 5. Simpan
         const records = allFound.map((f) => ({
             pattern: f.phrase,
             strategy: f.strategy,
-            chain_id: f.chainId,
-            chain_name: chainName(f.chainId),
+            coin: f.coin,
+            chain_name: f.chainName,
             private_key_hex: f.privHex,
             address: f.address,
-            balance_wei: f.balance,
-            last_tx_unix: f.lastTx ?? null,
+            balance: f.balance,
             checked_at_unix: Math.floor(Date.now() / 1000),
         }));
-
         appendEncryptedFrame(records, opts.outFile, ctx.aesKey);
         appendFoundTxt(records, opts.foundFile);
         logger.success(`DITEMUKAN ${records.length} alamat berdana! Disimpan ke ${opts.outFile} & ${opts.foundFile}`);
         for (const r of records) {
-            logger.success(`  ${r.address} [${r.chain_name}] saldo=${r.balance_wei} wei  pola="${r.pattern}" (${r.strategy})`);
+            logger.success(`  [${r.chain_name}] ${r.address}  saldo=${r.balance}  pola="${r.pattern}" (${r.strategy})`);
         }
     }
 
-    // Tandai semua alamat sebagai sudah dicek (di cache)
-    for (const d of fresh) ctx.cache.add(d.address);
-
-    return { derived: derived.length, fresh: fresh.length, found: allFound.length };
+    return { derived: derived.length, fresh: totalChecked, found: allFound.length };
 }
 
 // -----------------------
@@ -185,7 +193,8 @@ async function runAudit(overrides = {}) {
     opts.apiKey = null; // backend RPC publik tidak butuh API key
 
     logger.info(`Strategi derivasi : ${opts.strategies.join(", ")}`);
-    logger.info(`Chain dipantau    : ${opts.chains.map(chainName).join(", ")}`);
+    logger.info(`Koin dipantau     : ${(opts.coins || ["eth"]).join(", ")}`);
+    logger.info(`Chain EVM         : ${opts.chains.map(chainName).join(", ")}`);
     logger.info(`Konkurensi/Laju   : ${opts.concurrency} worker, ${opts.rateLimit} req/det`);
     logger.info(`Ukuran batch saldo: ${opts.batchSize} alamat per panggilan`);
     logger.info(`Berkas keluaran   : ${opts.outFile}, ${opts.foundFile}`);

@@ -21,6 +21,7 @@
  *   --rate=N                Batas laju panggilan RPC per detik (default 5)
  *   --batch=N               Ukuran batch alamat (default 20)
  *   --chains=1,137,56,...   Daftar chain id (default: 1,10,56,137,8453,42161)
+ *   --coins=eth,btc,ltc,... Koin yang dicek (default: eth,btc,ltc,doge,trx,sol)
  *   --strategies=a,b,c      Strategi derivasi (default: sha256,keccak256,doubleSha256)
  *   --log=info|debug|warn   Level log
  *   --dry-run               Jalankan satu blok lalu berhenti
@@ -64,6 +65,7 @@ function mapArgs(args) {
     if (args.rate) opts.rateLimit = parseInt(args.rate, 10);
     if (args.batch) opts.batchSize = Math.min(20, parseInt(args.batch, 10));
     if (args.chains) opts.chains = String(args.chains);
+    if (args.coins) opts.coins = String(args.coins);
     if (args.strategies) opts.strategies = String(args.strategies);
     if (args.log) opts.logLevel = String(args.log);
     if (args["dry-run"]) opts.dryRun = true;
