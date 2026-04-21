@@ -52,11 +52,12 @@ lib/logger.js              Logger berwarna leveled
 | `aes.key`         | Kunci AES-256 (auto-generate saat pertama jalan) |
 | `hallazgos.enc`   | Temuan terenkripsi (framed AES-GCM) |
 | `found.txt`       | Temuan plain text, tab-separated |
-| `cache.txt`       | Cache alamat yang sudah dicek (per-koin) |
 | `words_cache.txt` | Kata-kata yang sudah pernah di-scrape |
 
+> Cache alamat dicek hanya di memori — tidak ada file cache alamat yang ditulis ke disk.
+
 ## Strategi derivasi
-`sha256` (default), `doubleSha256`, `keccak256`, `sha256NoSpace`, `sha256Lower`.
+Semua strategi aktif secara default: `sha256`, `doubleSha256`, `keccak256`, `sha256NoSpace`, `sha256Lower`.
 
 ## Workflow
 - `Auditor` — `node index.js`
