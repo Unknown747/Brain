@@ -7,6 +7,7 @@
  *   node index.js --coins=eth,btc  Batasi koin yang dicek.
  *   node index.js --chains=1,56    Batasi chain EVM (chain ID).
  *   node index.js --intensity=heavy Tingkat mutasi: light | medium | heavy
+ *   node index.js --sources        Tampilkan daftar preset URL bawaan
  *   node index.js --help           Tampilkan bantuan.
  *
  * Koin yang didukung  : eth, btc, ltc, doge, trx, sol
@@ -21,6 +22,7 @@ const fs       = require("fs");
 const readline = require("readline");
 const logger   = require("./lib/logger");
 const { runAudit, CHECKPOINT_FILE } = require("./auditor_brainwallet");
+const { resolveSources, listPresets } = require("./lib/sources");
 
 // ---------- helpers ----------
 function parseArgs(argv) {
@@ -68,9 +70,18 @@ function prompt(question) {
 }
 
 // ---------- main ----------
+function showSources() {
+    console.log("\n  Preset URL bawaan (ketik nama-nya saat ditanya URL):\n");
+    for (const { name, urls } of listPresets()) {
+        console.log(`  • ${name.padEnd(13)} → ${urls[0]}${urls.length > 1 ? `  (+${urls.length - 1})` : ""}`);
+    }
+    console.log();
+}
+
 async function main() {
     const args   = parseArgs(process.argv);
-    if (args.help) { showHelp(); process.exit(0); }
+    if (args.help)         { showHelp();    process.exit(0); }
+    if (args["sources"])   { showSources(); process.exit(0); }
 
     // Gabung config.json + CLI args (CLI menang)
     const config = loadConfig();
@@ -96,25 +107,41 @@ async function main() {
         logger.info("Checkpoint dihapus. Memulai sesi baru...");
     }
 
-    // Alur normal — tanya URL
+    // Alur normal — pakai --urls dari CLI/config kalau ada, kalau tidak tanya
+    if (opts.urls) {
+        const list = Array.isArray(opts.urls) ? opts.urls : String(opts.urls).split(",");
+        opts.urls = resolveSources(list);
+        if (opts.urls.length === 0) {
+            logger.error("Tidak ada URL yang valid pada --urls.");
+            process.exit(1);
+        }
+        await runAudit(opts);
+        return;
+    }
+
     if (!process.stdin.isTTY) {
-        logger.error("Tidak bisa minta URL (stdin bukan TTY).");
+        logger.error("Tidak bisa minta URL (stdin bukan TTY). Pakai --urls=preset_atau_url");
         process.exit(1);
     }
 
     logger.banner();
-    process.stdout.write(`  \x1b[90mMasukkan satu atau lebih URL untuk di-scrape.\x1b[0m\n`);
-    process.stdout.write(`  \x1b[90mPisahkan dengan koma jika lebih dari satu.\x1b[0m\n`);
-    process.stdout.write(`  \x1b[90mContoh: https://en.wikipedia.org/wiki/Bitcoin\x1b[0m\n\n`);
+    process.stdout.write(`  \x1b[90mMasukkan URL atau nama preset (pisahkan dengan koma jika >1).\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90mPreset: einstein, shakespeare, twain, proverbs, bible, quran,\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         taoteching, bitcoin, movies, quotes  (lihat: --sources)\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90mContoh: einstein  atau  https://en.wikipedia.org/wiki/Bitcoin\x1b[0m\n\n`);
     process.stdout.write(`  \x1b[33mCatatan:\x1b[0m \x1b[90mCache alamat tidak disimpan — setiap sesi dimulai dari awal.\x1b[0m\n\n`);
 
-    const answer = (await prompt(`  \x1b[36m\x1b[1mURL\x1b[0m > `)).trim();
+    const answer = (await prompt(`  \x1b[36m\x1b[1mURL/preset\x1b[0m > `)).trim();
     if (!answer) {
-        logger.error("URL kosong, keluar.");
+        logger.error("Input kosong, keluar.");
         process.exit(1);
     }
 
-    opts.urls = answer.split(",").map((s) => s.trim()).filter(Boolean);
+    opts.urls = resolveSources(answer.split(","));
+    if (opts.urls.length === 0) {
+        logger.error("Tidak ada URL yang valid.");
+        process.exit(1);
+    }
     await runAudit(opts);
 }
 

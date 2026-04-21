@@ -8,6 +8,9 @@ API publik gratis tanpa API key.
 ## Cara pakai
 ```
 node index.js                          # tanya URL, cek semua koin default
+node index.js --urls=einstein          # langsung pakai preset bawaan (non-interaktif)
+node index.js --urls=einstein,bitcoin  # gabung beberapa preset/URL
+node index.js --sources                # daftar preset URL bawaan
 node index.js --coins=eth,btc,sol      # batasi koin
 node index.js --chains=1,56            # batasi chain EVM
 node index.js --strategies=sha256,md5  # batasi strategi hashing
