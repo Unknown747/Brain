@@ -363,11 +363,10 @@ async function runAudit(overrides = {}) {
     // otomatis — endpoint-nya tetap di kode dan akan diuji ulang & masuk cache
     // lagi kalau sudah pulih.
     try {
-        const fs2 = require("fs");
         let rawCount = 0;
-        if (fs2.existsSync(rpcHealthCache.FILE)) {
+        if (fs.existsSync(rpcHealthCache.FILE)) {
             try {
-                const raw = JSON.parse(fs2.readFileSync(rpcHealthCache.FILE, "utf8"));
+                const raw = JSON.parse(fs.readFileSync(rpcHealthCache.FILE, "utf8"));
                 if (Array.isArray(raw)) rawCount = raw.length;
             } catch {}
         }
