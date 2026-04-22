@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Tujuan](https://img.shields.io/badge/Tujuan-Riset_Keamanan-red.svg)](#keamanan)
 [![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#konfigurasi-default)
-[![Koin](https://img.shields.io/badge/Koin-BTC_LTC_DOGE_TRX_SOL-orange.svg)](#konfigurasi-default)
+[![Koin](https://img.shields.io/badge/Koin-BTC_LTC_DOGE_SOL-orange.svg)](#konfigurasi-default)
 
 ---
 
@@ -14,16 +14,30 @@
 
 **Brainwallet Auditor** adalah alat riset keamanan untuk mendeteksi dompet kripto yang dibuat dari frasa lemah (*brainwallet*). Alat ini:
 
-1. Mengambil teks dari URL → mengekstrak **kata + frasa nyata** (kalimat 4–10 kata, n-gram 4/5).
-2. Menghasilkan ribuan **varian mutasi** (case, suffix, prefix, tahun, leetspeak, camelCase/PascalCase/no-space).
+1. Mengambil teks dari URL → mengekstrak **frasa prioritas** (judul, heading, blockquote, kutipan), **frasa biasa** (kalimat 4–10 kata + n-gram 3/4/5), dan **kata tunggal**.
+2. Menghasilkan ribuan **varian mutasi** (case, suffix, prefix, tahun, leetspeak, camelCase/PascalCase/snake_case/kebab-case/inisial-frasa).
 3. Menurunkan private key memakai **6 strategi hashing** berbeda.
-4. Mengecek saldo di **10 jaringan blockchain** secara paralel.
+4. Mengecek saldo di **8 jaringan blockchain** secara paralel (4 EVM + BTC, LTC, DOGE, SOL).
 5. Retry otomatis (exponential backoff) jika API gagal.
-6. Menyimpan checkpoint — bisa dilanjutkan jika proses dihentikan.
-7. Menyimpan temuan secara terenkripsi (AES-256-GCM).
-8. Menampilkan ringkasan per koin + kesehatan RPC di akhir sesi.
+6. **Dedup berlapis 3** — token, varian mutasi, dan alamat semuanya cuma diproses sekali.
+7. Menyimpan checkpoint — bisa dilanjutkan jika proses dihentikan (Ctrl+C).
+8. Menyimpan temuan secara terenkripsi (AES-256-GCM).
+9. Menampilkan ringkasan per koin + kesehatan RPC + ETA dengan jam perkiraan selesai.
 
 > ⚠️ Alat ini dibuat semata-mata untuk tujuan edukasi dan penelitian keamanan.
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/Unknown747/Brain.git
+cd Brain
+npm install
+node index.js
+```
+
+Saat dijalankan tanpa flag, alat akan menanyakan URL/preset, lalu intensitas mutasi. Cukup itu.
 
 ---
 
@@ -32,26 +46,29 @@
 | Fitur | Detail |
 |---|---|
 | **Scraper cerdas** | HTML dibersihkan dari nav/footer/sidebar/script + filter token sampah |
-| **Frasa nyata** | Ekstraksi kalimat utuh 4–10 kata + n-gram 4/5 dari urutan asli teks |
+| **Ekstraksi 3 lapis** | (1) prioritas: title/h1-h3/blockquote/teks dalam tanda kutip · (2) frasa: kalimat 4–10 kata + n-gram 3/4/5 · (3) kata tunggal |
 | **Stop-words multi-bahasa** | EN + ID + ES (untuk kata tunggal; frasa tetap mempertahankan stop-words) |
-| **Cache scrape persisten** | Token yang sudah pernah di-scrape otomatis di-skip antar sesi (auto-prune) |
-| **Preset URL bawaan** | 10 sumber siap pakai: einstein, shakespeare, bible, quran, taoteching, … |
-| **Mutasi password** | case, suffix (!, 123, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse, camelCase/PascalCase |
+| **Cache scrape persisten** | Token yang sudah pernah di-scrape otomatis di-skip antar sesi (auto-prune 500k entries) |
+| **Preset URL bawaan** | 11 preset siap pakai termasuk `wikiquote-mix` (19 halaman tokoh) |
+| **Mutasi kata** | case, suffix (!, 123, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse |
+| **Mutasi frasa** | no-space, camelCase, PascalCase, snake_case, kebab-case, **inisial** (mis. "to be or not to be" → `tbontb`) |
 | **Tingkat intensitas** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
+| **Dedup varian antar-blok** | Varian yang sudah pernah keluar di blok manapun **tidak diproses ulang** |
 | **6 strategi hashing** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
 | **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (dapat dikonfigurasi) |
-| **Multi-koin** | BTC, LTC, DOGE, TRX, SOL |
+| **Multi-koin non-EVM** | BTC, LTC, DOGE, SOL |
 | **JSON-RPC batch (EVM)** | Banyak alamat per request — jauh lebih cepat |
 | **Multi-RPC fallback** | Otomatis pindah endpoint kalau satu RPC gagal/timeout |
 | **Tabel kesehatan RPC** | Endpoint mana yang dipakai & berapa kali gagal di akhir sesi |
 | **Retry otomatis** | Exponential backoff saat API gagal (maks 3×) |
 | **Pengecekan paralel** | Semua koin & chain dicek bersamaan |
-| **Kecepatan & ETA** | Ditampilkan live di terminal |
+| **Kecepatan & ETA** | Ditampilkan live di terminal dengan jam perkiraan selesai |
 | **Checkpoint & resume** | Tekan Ctrl+C kapan saja — progres tersimpan, bisa dilanjutkan |
 | **Cache alamat in-memory** | Tidak ada file cache alamat — setiap sesi mulai bersih |
-| **Enkripsi temuan** | Hasil disimpan dengan AES-256-GCM |
+| **Enkripsi temuan** | Hasil disimpan dengan AES-256-GCM (frame-based, append-only) |
 | **Bell notification** | Terminal berbunyi saat wallet berdana ditemukan |
 | **Ringkasan per koin** | Tabel alamat diperiksa & temuan per koin di akhir audit |
+| **Mode pratinjau** | `--preview=N` cek N item teratas hasil scrape tanpa audit saldo |
 | **config.json** | Simpan konfigurasi default supaya tidak perlu mengetik ulang flag |
 
 ---
@@ -60,8 +77,8 @@
 
 ```
 brainwallet-auditor/
-├── index.js                  # Entry point CLI
-├── auditor_brainwallet.js    # Orkestrator utama
+├── index.js                  # Entry point CLI (interaktif & non-interaktif)
+├── auditor_brainwallet.js    # Orkestrator audit utama
 ├── decrypt.js                # Dekripsi hallazgos.enc
 ├── config.example.json       # Template konfigurasi (salin ke config.json)
 ├── lib/
@@ -69,12 +86,12 @@ brainwallet-auditor/
 │   ├── derive.js             # 6 strategi derivasi private key
 │   ├── etherscan.js          # RPC publik multi-chain EVM + JSON-RPC batch + fallback
 │   ├── logger.js             # Terminal berwarna + progress bar + ETA + ringkasan
-│   ├── multicoin.js          # Derivasi & saldo BTC/LTC/DOGE/TRX/SOL
+│   ├── multicoin.js          # Derivasi & saldo BTC/LTC/DOGE/SOL
 │   ├── rpcStats.js           # Pelacak kesehatan tiap endpoint RPC
 │   ├── scrapeCache.js        # Cache persisten kata/frasa antar sesi
-│   ├── scraper.js            # Scrape URL + ekstraksi kata/frasa + filter stop-words
+│   ├── scraper.js            # Scrape URL + ekstraksi 3-lapis (priority/phrases/words)
 │   ├── sources.js            # Daftar preset URL bawaan
-│   ├── storage.js            # Enkripsi AES-GCM & penyimpanan temuan
+│   ├── storage.js            # Enkripsi AES-GCM & cache alamat in-memory
 │   └── util.js               # Rate limiter, concurrency, retry, format waktu
 ├── package.json
 ├── README.md
@@ -86,14 +103,13 @@ brainwallet-auditor/
 ## Instalasi
 
 ```bash
-# 1. Klon repositori
 git clone https://github.com/Unknown747/Brain.git
 cd Brain
 
-# 2. Pastikan Node.js 20+ terpasang
+# Pastikan Node.js 20+ terpasang
 node --version
 
-# 3. Pasang dependensi (hanya ethers)
+# Pasang dependensi (hanya ethers)
 npm install
 ```
 
@@ -104,20 +120,15 @@ Kunci AES dibuat otomatis di `aes.key` saat pertama dijalankan.
 
 ## Penggunaan
 
+### Mode interaktif (paling mudah)
+
 ```bash
 node index.js
-# atau
-npm start
 ```
 
-### Mode interaktif
-
-Saat dijalankan tanpa flag, script akan menanyakan URL atau nama preset.
-Anda bisa mengetik:
-
-- nama preset: `einstein`
-- gabungan beberapa preset/URL: `einstein,bitcoin,https://situs-saya.com/data`
-- `all` untuk audit semua preset bawaan sekaligus
+Alat akan bertanya:
+1. **URL/preset** — ketik nama preset (`einstein`) atau URL apa saja
+2. **Intensitas** — `light` / `medium` / `heavy` (default `medium`)
 
 ### Mode non-interaktif (CLI)
 
@@ -125,15 +136,13 @@ Anda bisa mengetik:
 node index.js --urls=einstein                  # Pakai preset bawaan langsung
 node index.js --urls=einstein,bitcoin          # Gabung beberapa preset/URL
 node index.js --urls=all                       # Audit semua preset bawaan
+node index.js --urls=einstein --preview=20     # Cek 20 item teratas, tidak audit saldo
+node index.js --urls=einstein --intensity=heavy
 node index.js --sources                        # Tampilkan daftar preset bawaan
-node index.js --coins=eth,btc,sol              # Batasi koin
-node index.js --chains=1,56                    # Batasi chain EVM
-node index.js --strategies=sha256,md5          # Batasi strategi hashing
-node index.js --intensity=heavy                # Tingkat mutasi: light | medium | heavy
-node index.js --help                           # Bantuan lengkap
+node index.js --help                           # Bantuan
 ```
 
-> Argumen CLI selalu mengalahkan `config.json`.
+> Argumen CLI selalu mengalahkan `config.json`. Pengaturan lanjutan (koin, chain, strategi, tuning kinerja) edit di `config.json`.
 
 ### Preset URL bawaan
 
@@ -149,22 +158,24 @@ node index.js --help                           # Bantuan lengkap
 | `quran` | Project Gutenberg — Quran (terjemahan) |
 | `bitcoin` | Bitcoin whitepaper + Wikipedia |
 | `quotes` | Gabungan: Einstein + Shakespeare + Twain + Proverbs |
-| `all` | Semua preset di atas (10 URL unik) |
+| `wikiquote-mix` | 19 halaman: filsuf + ilmuwan + penulis + tokoh sejarah |
+| `all` | Semua preset di atas digabung & deduplikasi |
 
-### Konfigurasi default (config.json)
+### Konfigurasi lanjutan (config.json)
 
 Salin `config.example.json` ke `config.json` lalu sesuaikan:
 
 ```json
 {
-  "coins":       "eth,btc,ltc,doge,trx,sol",
+  "coins":       "eth,btc,ltc,doge,sol",
   "chains":      "1,56,137,42161",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
+  "intensity":   "medium",
   "chunkSize":   1000,
   "concurrency": 5,
   "rateLimit":   5,
   "batchSize":   100,
-  "intensity":   "medium"
+  "logLevel":    "info"
 }
 ```
 
@@ -201,21 +212,25 @@ npm run decrypt
 URL / preset
    │
    ▼
-Scraping & ekstraksi kata + frasa nyata
-   │  (filter stop-words, skip token yang sudah ada di cache persisten)
+Scraping & ekstraksi 3-lapis
+   │  - priority: title/h1-h3/blockquote/teks dalam kutipan
+   │  - phrases : kalimat 4–10 kata + n-gram 3/4/5
+   │  - words   : token tunggal (filter stop-words)
+   │  (token yang sudah ada di cache persisten otomatis di-skip)
    ▼
-Generate varian mutasi
-   │  (case, suffix, prefix, tahun, leetspeak, camel/PascalCase, no-space)
+Generate varian mutasi          ← dedup antar-blok
+   │  - kata: case/suffix/prefix/tahun/leetspeak/reverse
+   │  - frasa: no-space/camelCase/PascalCase/snake_case/
+   │           kebab-case/inisial-frasa (mis. "tbontb")
    ▼
 Derivasi private key  ── 6 strategi hashing
    │
    ▼
-Cek saldo paralel (per koin & chain)
+Cek saldo paralel (per koin & chain)   ← dedup alamat in-memory
    ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum  (JSON-RPC batch + fallback)
    ├── BTC  → blockchain.info  (+ fallback mempool.space)
    ├── LTC  → Blockchair
    ├── DOGE → Blockchair
-   ├── TRX  → TronGrid
    └── SOL  → Solana RPC publik (multi-endpoint fallback)
    │
    ▼
@@ -230,13 +245,45 @@ Temuan → hallazgos.enc (AES-256-GCM) + found.txt
 | Parameter | Nilai | Keterangan |
 |---|---|---|
 | `chains` | 1, 56, 137, 42161 | ETH · BNB Chain · Polygon · Arbitrum |
-| `coins` | eth, btc, ltc, doge, trx, sol | Semua koin |
+| `coins` | eth, btc, ltc, doge, sol | Semua koin yang didukung |
 | `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | Semua strategi |
 | `intensity` | medium | Tingkat mutasi (light / medium / heavy) |
 | `chunkSize` | 1000 | Kata per blok |
 | `concurrency` | 5 | Permintaan paralel per chain EVM |
 | `rateLimit` | 5 | Request/detik (EVM) |
 | `batchSize` | 100 | Alamat per batch RPC EVM |
+| `logLevel` | info | debug / info / warn / error |
+
+---
+
+## Tampilan terminal
+
+**Banner sesi:**
+```
+══════════════════════════════════════════════════════════
+  ⛓  BRAINWALLET AUDITOR   security research tool
+  22/4/2026, 04.21.49
+══════════════════════════════════════════════════════════
+```
+
+**Progress per blok (live):**
+```
+[BLK] 12/200 ████░░░░░░░░░░░░ 6% │ kandidat:24800 │ cek:24800 │ temuan:0 │ 845/s │ ETA: 22m (~16:43)
+```
+
+**Ringkasan akhir:**
+```
+══════════════════════════════════════════════════════════
+  ✓ AUDIT SELESAI   durasi: 18m 22d
+══════════════════════════════════════════════════════════
+  Blok diproses     : 200
+  Total kandidat    : 4.960.000
+  Varian dilewati   : 412.301 (duplikat)
+  Alamat diperiksa  : 4.547.699
+  Kecepatan rata²   : 4.128 alamat/detik
+  Temuan            : 0
+══════════════════════════════════════════════════════════
+```
 
 ---
 
@@ -245,12 +292,13 @@ Temuan → hallazgos.enc (AES-256-GCM) + found.txt
 | File | Isi | Git |
 |---|---|---|
 | `aes.key` | Kunci AES-256 (auto-generate) | gitignored |
-| `hallazgos.enc` | Temuan terenkripsi (AES-GCM) | gitignored |
+| `hallazgos.enc` | Temuan terenkripsi (AES-GCM, frame-based) | gitignored |
 | `found.txt` | Temuan plain text, tab-separated | gitignored |
-| `.scrape_cache.json` | Kata & frasa yang sudah pernah di-scrape (persisten antar sesi, auto-prune) | gitignored |
+| `.scrape_cache.json` | Kata & frasa yang sudah pernah di-scrape (auto-prune 500k) | gitignored |
 | `progress.json` | Checkpoint sesi (auto-delete saat selesai) | gitignored |
+| `config.json` | Konfigurasi default lokal (opsional) | gitignored |
 
-> Cache scrape persisten — token yang sudah pernah di-scrape otomatis di-skip pada sesi berikutnya. Hapus `.scrape_cache.json` untuk reset.
+> Hapus `.scrape_cache.json` untuk reset cache scrape.
 
 ---
 
@@ -266,9 +314,11 @@ Brainwallet adalah teknik menghasilkan private key dari frasa yang dihafal. Kele
 
 ## Persyaratan
 
-- **Node.js 20+**
+- **Node.js 20+** (memakai `fetch` & `crypto.createPrivateKey` bawaan)
 - Koneksi internet (untuk API publik blockchain)
 - `aes.key` (dibuat otomatis jika belum ada)
+
+Dependency runtime cuma satu: **ethers v6** (untuk derivasi pubkey & address EVM).
 
 ---
 

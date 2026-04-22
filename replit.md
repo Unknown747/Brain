@@ -1,9 +1,10 @@
 # Brainwallet Auditor
 
-Node.js CLI yang men-scrape teks dari URL, mengekstrak kata + frasa nyata
-(kalimat 4–10 kata, n-gram 4/5), menghasilkan varian mutasi yang banyak,
-lalu mengecek saldo di 10 jaringan blockchain secara paralel menggunakan
-API publik gratis tanpa API key.
+Node.js CLI yang men-scrape teks dari URL, mengekstrak frasa prioritas
+(title/heading/blockquote/kutipan) + frasa biasa (kalimat 4–10 kata,
+n-gram 3/4/5) + kata tunggal, menghasilkan varian mutasi yang banyak,
+lalu mengecek saldo di 8 jaringan blockchain (4 EVM + BTC/LTC/DOGE/SOL)
+secara paralel menggunakan API publik gratis tanpa API key.
 
 ## Cara pakai
 ```
