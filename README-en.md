@@ -5,8 +5,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Purpose](https://img.shields.io/badge/Purpose-Security_Research-red.svg)](#security)
-[![EVM](https://img.shields.io/badge/EVM-11_chains-purple.svg)](#default-configuration)
-[![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_SOL-orange.svg)](#default-configuration)
+[![EVM](https://img.shields.io/badge/EVM-19_chains-purple.svg)](#default-configuration)
+[![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_BCH_DASH_ZEC_SOL_ADA-orange.svg)](#default-configuration)
 
 ---
 
@@ -16,8 +16,8 @@
 
 1. Fetches text from URLs → extracts **priority phrases** (title, headings, blockquotes, quoted strings), **regular phrases** (4–10 word sentences + 3/4/5-grams), and **single words**.
 2. Generates thousands of **mutation variants** (case, suffix, prefix, year, leetspeak, camelCase/PascalCase/snake_case/kebab-case/phrase-initials).
-3. Derives private keys using **6 different hashing strategies**.
-4. Checks balances across **15 blockchain networks** in parallel (11 EVM + BTC, LTC, DOGE, SOL).
+3. Derives private keys using **15 derivation strategies** (10 default + 5 opt-in).
+4. Checks balances across **27 blockchain networks** in parallel (19 EVM + BTC/LTC/DOGE/BCH/DASH/ZEC/SOL/ADA).
 5. Auto-retries with exponential backoff on API failure.
 6. **Three-layer dedup** — tokens, mutation variants, and addresses are each processed only once.
 7. Saves checkpoints — can resume if the process is interrupted (Ctrl+C).
@@ -43,37 +43,53 @@ When run without flags, the tool asks for a URL/preset, then the mutation intens
 
 ## Features
 
+### Scraper
 | Feature | Detail |
 |---|---|
-| **Smart scraper** | HTML cleaned of nav/footer/sidebar/script + junk-token filter |
+| **Parallel fetch** | URLs fetched concurrently (concurrency 5) — 19-URL preset ~3-5× faster |
+| **HTTP 304 caching** | ETag & Last-Modified stored per URL; unchanged pages aren't re-downloaded |
+| **Persistent token cache** | Words & phrases already produced are skipped across sessions (auto-prune at 500k) |
+| **Pre-strip noise** | `<script>/<style>/<svg>/<iframe>` removed once upfront — priority regex runs on much smaller string |
+| **HTML cap 8 MB** | Pathological pages truncated automatically to prevent catastrophic backtracking |
 | **3-layer extraction** | (1) priority: title/h1-h3/blockquote/quoted strings · (2) phrases: 4–10 word sentences + 3/4/5-grams · (3) single words |
-| **Multi-language stop-words** | EN + ID + ES (single words filtered; phrases keep stop-words) |
-| **Persistent scrape cache** | Tokens already scraped are auto-skipped across sessions (auto-prune at 500k entries) |
+| **Multi-language stop-words** | EN, ID, ES, RU, AR, JP, KR, ZH (single-words filtered; phrases keep stop-words) |
+| **Wikipedia-aware** | Strips wiki artifacts (`[edit]`, `[citation needed]`, ISBN/DOI/arXiv, navbox, hatnote, IPA, birth-death dates) + multi-word proper-noun explosion |
+| **Italics/bold extraction** | `<i>/<em>/<b>/<strong>/<cite>` tags also harvested |
 | **Built-in URL presets** | 11 ready-to-use presets including `wikiquote-mix` (19 famous-people pages) |
+
+### Mutation & derivation
+| Feature | Detail |
+|---|---|
 | **Word mutations** | case, suffix (!, 123, 2024…), prefix (the, my…), years (1990–2026), leetspeak, reverse |
-| **Phrase mutations** | no-space, camelCase, PascalCase, snake_case, kebab-case, **initials** (e.g. "to be or not to be" → `tbontb`) |
+| **Phrase mutations** | no-space, camelCase, PascalCase, snake_case, kebab-case, initials ("to be or not to be" → `tbontb`) |
 | **Intensity levels** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
-| **Cross-block variant dedup** | Variants seen in any earlier block are **not re-processed** |
-| **6 hashing strategies** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
-| **Multi-chain EVM (11 chains)** | Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era (Fantom 250 optional) |
+| **Cross-block variant dedup** | Variants seen in any earlier block are not re-processed in the same session |
+| **15 derivation strategies** | 10 default fast: SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space / lower), MD5→SHA-256, PBKDF2, scrypt, HMAC-Bitcoin-Seed, BIP39 seed. 5 opt-in: argon2 / argon2d (heavy KDF), bip44eth (BIP39 → m/44'/60'/0'/0/0), electrum (legacy), warpwallet (scrypt+pbkdf2 layered) |
+
+### Balance check
+| Feature | Detail |
+|---|---|
+| **Multi-chain EVM (19 chains)** | Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era, Fantom, Cronos, Celo, Moonbeam, Mantle, Blast, opBNB, Polygon zkEVM |
+| **Non-EVM coins** | BTC, LTC, DOGE, BCH, DASH, ZEC, SOL, ADA |
+| **Contract detection** | Addresses that are contracts are auto-flagged (`eth_getCode`) |
+| **ERC-20 token check** | Popular stablecoins & tokens checked per chain (USDT/USDC/DAI/BUSD/etc.) |
+| **JSON-RPC batch (EVM)** | Many addresses per request — much faster (auto-split if too big) |
 | **Per-chain batch & timeout** | Rate-limit-sensitive chains (Arbitrum/Linea/Scroll/zkSync) use smaller batches & longer timeouts |
-| **"Race" mode for Arbitrum** | 2 healthy endpoints fired in parallel — winner wins, the rest are aborted |
-| **Multi-RPC fallback + circuit breaker** | 7–12 public endpoints per chain (drpc, llamarpc, publicnode, ankr, 1rpc, blast, onfinality, omniatech); failed endpoints auto-cooldown 60s, sticky to last-good endpoint |
-| **Wikipedia-aware scraper** | Strips wiki artifacts (`[edit]`, `[citation needed]`, ISBN/DOI/arXiv, navbox, hatnote, IPA, birth-death dates) + extracts proper-nouns and explodes them into sub-phrases & singletons (e.g. "Kobe Bean Bryant" → "Kobe", "Bryant", "Kobe Bean", "Bean Bryant") |
-| **Italics/bold extraction** | `<i>`/`<em>`/`<b>`/`<strong>`/`<cite>` tags also harvested (work titles & key terms) |
-| **Non-EVM coins** | BTC, LTC, DOGE, SOL |
-| **JSON-RPC batch (EVM)** | Many addresses per request — much faster |
-| **RPC health table** | See which endpoint was used & how often it failed at session end |
-| **Auto-retry** | Exponential backoff on API failure (max 3×) |
+| **"Race" mode for Arbitrum** | 2 healthy endpoints fired in parallel — winner wins, rest aborted |
+| **Multi-RPC fallback + circuit breaker** | 7–12 public endpoints per chain (drpc, llamarpc, publicnode, ankr, 1rpc, blast, onfinality, omniatech); failed endpoints cooldown 60s, sticky to last-good endpoint |
+| **RPC health cache** | Stored in `.rpc_health.json` — next session immediately uses healthy endpoints |
 | **Parallel checks** | All coins & chains checked simultaneously |
-| **Speed & ETA** | Displayed live in the terminal with estimated finish time |
-| **Checkpoint & resume** | Press Ctrl+C anytime — progress is saved and can be resumed |
-| **In-memory address cache** | No on-disk address cache — every session starts clean |
-| **Encrypted findings** | Saved with AES-256-GCM (frame-based, append-only) |
+
+### User experience
+| Feature | Detail |
+|---|---|
+| **Pre-audit estimate** | Before starting, calibrates 50 variants → shows projected total variants, derivations, address checks & finish time |
+| **Live speed & ETA** | Per-block progress bar with estimated finish time |
+| **Checkpoint & resume** | Ctrl+C anytime — progress saved and can be resumed |
+| **Encrypted findings** | AES-256-GCM (frame-based, append-only) to `hallazgos.enc` |
 | **Bell notification** | Terminal beeps when a funded wallet is found |
 | **Per-coin summary** | Table of addresses checked & finds per coin at session end |
-| **Preview mode** | `--preview=N` shows top-N scraped items without auditing balances |
-| **config.json** | Save default configuration to avoid retyping flags |
+| **config.json only** | No CLI flags — all settings via `config.json` (object toggles for each coin/chain/strategy) |
 
 ---
 
@@ -81,22 +97,28 @@ When run without flags, the tool asks for a URL/preset, then the mutation intens
 
 ```
 brainwallet-auditor/
-├── index.js                  # CLI entry point (interactive & non-interactive)
-├── auditor_brainwallet.js    # Main audit orchestrator
-├── decrypt.js                # Decrypts hallazgos.enc
+├── index.js                  # CLI entry (config.json only, no flags)
+├── auditor_brainwallet.js    # Main audit orchestrator (estimate + run + checkpoint)
+├── decrypt.js                # Decrypts hallazgos.enc → stdout
 ├── config.example.json       # Configuration template (copy to config.json)
 ├── lib/
 │   ├── candidates.js         # Mutation variant generator (light/medium/heavy)
-│   ├── derive.js             # 6 private-key derivation strategies
-│   ├── etherscan.js          # Public multi-chain EVM RPC + JSON-RPC batch + fallback
+│   ├── chainlist.js          # Auto-discovery of public RPCs from chainlist.org
+│   ├── derive.js             # 15 derivation strategies (10 default + 5 opt-in)
+│   ├── etherscan.js          # Multi-chain EVM RPC + JSON-RPC batch + race + fallback
+│   ├── httpStats.js          # HTTP retry counter per endpoint
 │   ├── logger.js             # Colored terminal + progress bar + ETA + summaries
-│   ├── multicoin.js          # BTC/LTC/DOGE/SOL derivation & balance
-│   ├── rpcStats.js           # Per-endpoint RPC health tracker
-│   ├── scrapeCache.js        # Persistent word/phrase cache across sessions
-│   ├── scraper.js            # URL scrape + 3-layer extraction (priority/phrases/words)
+│   ├── multicoin.js          # Non-EVM derivation & balance (BTC/LTC/DOGE/BCH/DASH/ZEC/SOL/ADA)
+│   ├── notify.js             # Start/find notifications (Telegram/Discord, optional)
+│   ├── rpcHealthCache.js     # RPC health score persistence to .rpc_health.json
+│   ├── rpcStats.js           # Per-endpoint ok/fail/latency tracker (live)
+│   ├── scrapeCache.js        # Persistent words + phrases + ETag/Last-Modified per URL
+│   ├── scraper.js            # Parallel scrape + 304 caching + 3-layer extraction
 │   ├── sources.js            # Built-in URL presets
-│   ├── storage.js            # AES-GCM encryption & in-memory address cache
-│   └── util.js               # Rate limiter, concurrency, retry, time formatting
+│   ├── storage.js            # AES-GCM frame encryption + in-memory address cache
+│   ├── tokens.js             # Popular ERC-20 tokens per chain
+│   └── util.js               # Rate limiter, concurrency, retry, conditional GET
+├── tests/                    # Unit tests (node --test)
 ├── package.json
 ├── README.md
 └── README-en.md
@@ -113,7 +135,7 @@ cd Brain
 # Make sure Node.js 20+ is installed
 node --version
 
-# Install dependencies (only ethers)
+# Install dependencies
 npm install
 ```
 
@@ -134,20 +156,9 @@ The tool will ask:
 1. **URL/preset** — type a preset name (`einstein`) or any URL
 2. **Intensity** — `light` / `medium` / `heavy` (default `medium`)
 
-### Non-interactive (CLI)
+### Non-interactive
 
-```bash
-node index.js --urls=einstein                  # Use a preset directly
-node index.js --urls=einstein,bitcoin          # Combine multiple presets/URLs
-node index.js --urls=all                       # Audit all built-in presets
-node index.js --urls=einstein --preview=20     # Show top-20 items, skip balance audit
-node index.js --urls=einstein --intensity=heavy
-node index.js --urls=https://en.wikipedia.org/wiki/Kobe --limit=1000  # Cap to 1000 tokens (smoke test)
-node index.js --sources                        # List built-in presets
-node index.js --help                           # Help
-```
-
-> CLI arguments always override `config.json`. Advanced settings (coins, chains, strategies, performance tuning) live in `config.json`.
+Set `url` in `config.json` to your preset/URL, then run `node index.js`. All settings are read from `config.json` — **no CLI flags**.
 
 ### Built-in URL presets
 
@@ -166,16 +177,43 @@ node index.js --help                           # Help
 | `wikiquote-mix` | 19 pages: philosophers + scientists + writers + historical figures |
 | `all` | All presets above merged & deduped |
 
-### Advanced configuration (config.json)
+### Configuration (config.json)
 
-Copy `config.example.json` to `config.json` and tweak as needed:
+Copy `config.example.json` to `config.json`, edit it, run `node index.js`. Each variable has an `_varName` description key above it (JSON has no comments). Short example:
 
 ```json
 {
-  "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161,10,8453,43114,100,59144,534352,324",
-  "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
-  "intensity":   "medium",
+  "url":       "einstein",
+  "intensity": "medium",
+
+  "coins": {
+    "eth": true, "btc": true, "btc-bech32": true,
+    "ltc": true, "doge": true, "sol": true, "ada": true,
+    "bch": false, "dash": false, "zec": false
+  },
+
+  "chains": {
+    "ethereum": true, "bnb": true, "polygon": true,
+    "arbitrum": true, "optimism": true, "base": true,
+    "avalanche": true, "linea": true,
+    "fantom": false, "gnosis": false, "scroll": false, "zksync": false,
+    "cronos": false, "celo": false, "moonbeam": false, "mantle": false,
+    "blast": false, "opbnb": false, "polygon-zkevm": false
+  },
+
+  "strategies": {
+    "sha256": true, "doubleSha256": true, "keccak256": true,
+    "sha256NoSpace": true, "sha256Lower": true, "md5": true,
+    "pbkdf2": true, "scrypt": true,
+    "hmacBitcoinSeed": true, "bip39Seed": true,
+    "argon2": false, "argon2d": false,
+    "bip44eth": false, "electrum": false, "warpwallet": false
+  },
+
+  "checkContract": true,
+  "checkTokens":   true,
+  "scanAllAddressesForTokens": true,
+
   "chunkSize":   1000,
   "concurrency": 5,
   "rateLimit":   5,
@@ -184,7 +222,7 @@ Copy `config.example.json` to `config.json` and tweak as needed:
 }
 ```
 
-`config.json` is in `.gitignore` — it won't be committed.
+`config.json` is in `.gitignore` — it won't be committed. See `config.example.json` for the full description of every field.
 
 ### Checkpoint & resume
 
@@ -217,41 +255,45 @@ npm run decrypt
 URL / preset
    │
    ▼
-Scraping & 3-layer extraction
-   │  - priority: title/h1-h3/blockquote/quoted strings
-   │  - phrases : 4–10 word sentences + 3/4/5-grams
-   │  - words   : single tokens (stop-words filtered)
-   │  (tokens already in persistent cache are auto-skipped)
+Parallel scraping (concurrency 5)
+   │  - HTTP 304: unchanged URLs skip fetch & parse entirely
+   │  - pre-strip <script>/<style>/<svg>/<iframe>
+   │  - 8 MB HTML cap
+   │  - 3-layer extraction: priority / phrases / words
+   │  (words & phrases already in token cache are auto-skipped)
    ▼
-Generate mutation variants       ← cross-block dedup
+Pre-audit estimate   ← calibrate 50 variants, predict total time
+   ▼
+Generate mutation variants     ← cross-block dedup
    │  - words : case/suffix/prefix/year/leetspeak/reverse
    │  - phrase: no-space/camelCase/PascalCase/snake_case/
    │            kebab-case/phrase-initials (e.g. "tbontb")
    ▼
-Derive private key  ── 6 hashing strategies
-   │
+Derive private key  ── 10 default strategies + 5 opt-in
    ▼
 Parallel balance checks (per coin & chain)   ← in-memory address dedup
-   ├── ETH  → Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era  (JSON-RPC batch + race + circuit breaker)
-   ├── BTC  → blockchain.info  (+ mempool.space fallback)
-   ├── LTC  → Blockchair
-   ├── DOGE → Blockchair
-   └── SOL  → Public Solana RPC (multi-endpoint fallback)
+   ├── ETH  → 19 EVM chains (JSON-RPC batch + race + circuit breaker)
+   ├── BTC/LTC/DOGE/BCH/DASH/ZEC → blockchain.info / mempool.space / Blockchair
+   ├── SOL  → Public Solana RPC (multi-endpoint fallback)
+   └── ADA  → Koios
    │
    ▼
 Findings → hallazgos.enc (AES-256-GCM) + found.txt
-           + bell + per-coin summary + RPC health table
+           + bell + notify (optional) + per-coin summary + RPC table
 ```
 
 ---
 
-## Default Configuration
+## Default configuration (config.json)
 
-| Parameter | Value | Description |
+| Parameter | Default value | Description |
 |---|---|---|
-| `chains` | 1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324 | ETH · BNB · Polygon · Arbitrum · Optimism · Base · Avalanche · Gnosis · Linea · Scroll · zkSync Era |
-| `coins` | eth, btc, ltc, doge, sol | All supported coins |
-| `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | All strategies |
+| `coins` (on) | eth, btc, btc-bech32, ltc, doge, sol, ada | 7 top coins (BCH/DASH/ZEC off — virtually never carry brainwallet balance) |
+| `chains` (on) | ethereum, bnb, polygon, arbitrum, optimism, base, avalanche, linea | 8 busiest EVM chains (11 minor chains off) |
+| `strategies` (on) | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5, pbkdf2, scrypt, hmacBitcoinSeed, bip39Seed | 10 fast strategies (5 expensive KDFs off) |
+| `checkContract` | true | Flag addresses that are contracts |
+| `checkTokens` | true | Check popular ERC-20 token balances per chain |
+| `scanAllAddressesForTokens` | true | Check tokens for ALL addresses (not only those with native balance) |
 | `intensity` | medium | Mutation level (light / medium / heavy) |
 | `chunkSize` | 1000 | Words per block |
 | `concurrency` | 5 | Parallel requests per EVM chain |
@@ -269,6 +311,17 @@ Findings → hallazgos.enc (AES-256-GCM) + found.txt
   ⛓  BRAINWALLET AUDITOR   security research tool
   22/4/2026, 04.21.49
 ══════════════════════════════════════════════════════════
+```
+
+**Pre-audit estimate:**
+```
+▶ Estimate
+──────────────────────────────────────────────────────────
+[INF] Token corpus     : 29,626
+[INF] Total variants   : ~1,305,025 (44.0/token, medium intensity)
+[INF] Total derivations: ~13,050,250 (10 strategies)
+[INF] Total addresses  : ~91,351,750 (7 coins)
+[INF] Estimated time   : ~53h 58m 38s  (calibration: 106.90 ms/variant)
 ```
 
 **Per-block progress (live):**
@@ -299,11 +352,12 @@ Findings → hallazgos.enc (AES-256-GCM) + found.txt
 | `aes.key` | AES-256 key (auto-generated) | gitignored |
 | `hallazgos.enc` | Encrypted findings (AES-GCM, frame-based) | gitignored |
 | `found.txt` | Plain-text findings, tab-separated | gitignored |
-| `.scrape_cache.json` | Words & phrases already scraped (auto-prune at 500k) | gitignored |
+| `.scrape_cache.json` | Words + phrases + per-URL ETag/Last-Modified (auto-prune at 500k) | gitignored |
+| `.rpc_health.json` | RPC endpoint health score persisted across sessions | gitignored |
 | `progress.json` | Session checkpoint (auto-deleted on completion) | gitignored |
-| `config.json` | Local default configuration (optional) | gitignored |
+| `config.json` | Local configuration | gitignored |
 
-> Delete `.scrape_cache.json` to reset the scrape cache.
+> Delete `.scrape_cache.json` to reset the scrape cache (tokens + URL ETags).
 
 ---
 
@@ -323,7 +377,7 @@ Brainwallets generate a private key from a memorized phrase. The weakness: if th
 - Internet connection (for public blockchain APIs)
 - `aes.key` (auto-generated if missing)
 
-Single runtime dependency: **ethers v6** (for EVM pubkey & address derivation).
+Runtime dependencies: **ethers v6** (EVM pubkey & address) + **@noble/hashes** (PBKDF2/scrypt/argon2/HMAC) + **@noble/curves** (BIP32/secp256k1 for BIP44 & SOL/ADA).
 
 ---
 
