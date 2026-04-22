@@ -34,8 +34,9 @@ const logger = require("./lib/logger");
 const { createRateLimiter, runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
 const {
     balanceMulti, codeOfMulti, tokenBalancesMulti,
-    chainName, chainBatchSize, addRpcs, rpcChainStatus,
+    chainName, chainBatchSize, addRpcs, rpcChainStatus, reorderByHealth,
 } = require("./lib/etherscan");
+const rpcHealthCache             = require("./lib/rpcHealthCache");
 const { deriveAll }              = require("./lib/derive");
 const { generateVariants }       = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
@@ -355,6 +356,20 @@ async function runAudit(overrides = {}) {
         }
     }
 
+    // Hidrasi cache kesehatan RPC antar-sesi (otomatis, tanpa flag).
+    // Endpoint dengan skor historis terbaik diletakkan paling depan, sehingga
+    // sesi baru langsung memilih RPC yang terbukti sehat dari sesi sebelumnya.
+    try {
+        const cached = rpcHealthCache.load();
+        if (cached.length > 0) {
+            const n = rpcStats.hydrate(cached);
+            const touched = reorderByHealth(rpcHealthCache.score) || 0;
+            if (n > 0) {
+                logger.info(`Cache RPC dimuat: ${n} entri, ${touched} chain di-reorder berdasar histori`);
+            }
+        }
+    } catch {}
+
     // Auto-discovery RPC (#25).
     if (opts.autoDiscoverRpcs) {
         try {
@@ -398,6 +413,7 @@ async function runAudit(overrides = {}) {
             saveCheckpoint(currentCp);
             logger.warn(`Dihentikan. Checkpoint disimpan → ${CHECKPOINT_FILE}. Jalankan ulang untuk melanjutkan.`);
         }
+        try { rpcHealthCache.save(rpcStats.snapshot()); } catch {}
         process.exit(0);
     };
     process.once("SIGINT", sigintHandler);
@@ -523,6 +539,9 @@ async function runAudit(overrides = {}) {
                 logger.rpcPulse(rpcChainStatus(), rpcStats.byLabel());
             } catch {}
 
+            // Persistensi cache kesehatan RPC antar-sesi (auto, tiap blok).
+            try { rpcHealthCache.save(rpcStats.snapshot()); } catch {}
+
             // Checkpoint: simpan progres + AddressCache + seenVariants.
             // seenVariants dibatasi 500K entri supaya checkpoint tidak meledak.
             const seenSer = [...ctx.seenVariants].slice(-500_000);
@@ -560,6 +579,7 @@ function finalize(stats, startTime, cumCoinStats, ctx) {
     logger.coinSummary(cumCoinStats);
     logger.rpcSummary(rpcStats.snapshot());
     logger.summary(stats, formatDuration(Date.now() - startTime));
+    try { rpcHealthCache.save(rpcStats.snapshot()); } catch {}
     return stats;
 }
 

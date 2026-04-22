@@ -28,3 +28,4 @@ Thumbs.db
 .vscode/
 .idea/
 .scrape_cache.json
+.rpc_health.json
