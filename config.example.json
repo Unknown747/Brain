@@ -1,10 +1,13 @@
 {
-  "_petunjuk": "Salin file ini menjadi config.json, lalu nyalakan/matikan apa yang Anda butuhkan. Tidak ada flag CLI — semua diatur di sini.",
+  "_petunjuk": "Tidak ada flag CLI — semua diatur di file ini. Kunci apa pun yang diawali underscore (_) hanyalah deskripsi dan diabaikan oleh program.",
 
-  "url":       "einstein",
-  "intensity": "medium",
+  "_url":       "URL halaman atau nama preset yang akan diaudit (contoh: 'einstein', 'bitcoin', 'einstein,bitcoin', atau https://...). Kosongkan supaya program menanyakan saat dijalankan.",
+  "url":        "einstein",
 
-  "_komentar_koin": "Nyalakan koin yang ingin diaudit. BCH/DASH/ZEC dimatikan default karena saldo brainwallet di sana hampir tidak pernah ditemukan.",
+  "_intensity": "Tingkat agresivitas mutasi password: 'light' = cepat & sempit, 'medium' = seimbang (default), 'heavy' = paling luas tapi lambat.",
+  "intensity":  "medium",
+
+  "_coins": "Koin yang ingin dicek saldonya. Set true untuk nyalakan, false untuk matikan. BCH/DASH/ZEC dimatikan default karena saldo brainwallet di sana hampir tidak pernah ditemukan.",
   "coins": {
     "eth":        true,
     "btc":        true,
@@ -18,7 +21,7 @@
     "zec":        false
   },
 
-  "_komentar_chain": "8 chain teramai dinyalakan default. Sisanya dimatikan supaya audit cepat & hemat request RPC.",
+  "_chains": "Jaringan EVM yang ikut dicek (hanya berpengaruh kalau coin 'eth' aktif). 8 chain teramai dinyalakan default; sisanya dimatikan supaya audit cepat & hemat request RPC.",
   "chains": {
     "ethereum":      true,
     "bnb":           true,
@@ -42,7 +45,7 @@
     "fantom":        false
   },
 
-  "_komentar_strategi": "10 strategi default cepat. Yang opsional MAHAL (argon2/argon2d/bip44eth/electrum/warpwallet) dimatikan default — nyalakan hanya kalau target spesifik dicurigai memakai KDF tersebut, karena akan memperlambat audit secara signifikan.",
+  "_strategies": "Cara menurunkan private key dari frasa. 10 strategi default cepat (mikrodetik–puluhan ms). 5 strategi opsional MAHAL — nyalakan hanya kalau target dicurigai memakai KDF tersebut, karena akan memperlambat audit secara signifikan (warpwallet bisa ~detik per derive).",
   "strategies": {
     "sha256":          true,
     "doubleSha256":    true,
@@ -62,16 +65,22 @@
     "warpwallet":      false
   },
 
-  "_komentar_fitur": "Fitur yang benar-benar membantu audit dinyalakan default. autoDiscoverRpcs dimatikan karena daftar RPC bawaan sudah cukup; nyalakan kalau Anda mau menambah endpoint dari chainlist.org.",
-  "checkContracts":            true,
-  "checkTokens":               true,
-  "scanAllAddressesForTokens": false,
-  "autoDiscoverRpcs":          false,
+  "_checkContracts":            "Tandai alamat yang sebenarnya berupa smart contract (eth_getCode != 0x), supaya tidak salah klaim 'kunci ditemukan'.",
+  "checkContracts":             true,
 
-  "_komentar_notify": "Isi kalau mau notifikasi temuan. Private key TIDAK PERNAH dikirim kecuali includePrivKey=true.",
+  "_checkTokens":               "Cek juga saldo token ERC-20 utama (USDT, USDC, DAI, WETH, dll.) — banyak brainwallet hanya berisi stablecoin tanpa native gas.",
+  "checkTokens":                true,
+
+  "_scanAllAddressesForTokens": "false = cek token hanya untuk alamat yang punya saldo native > 0 (cepat, default). true = cek token untuk SEMUA alamat (jauh lebih lambat, mahal RPC).",
+  "scanAllAddressesForTokens":  false,
+
+  "_autoDiscoverRpcs":          "Tarik daftar RPC tambahan dari chainlist.org saat startup. Daftar bawaan biasanya sudah cukup; nyalakan kalau Anda mau ketahanan endpoint ekstra.",
+  "autoDiscoverRpcs":           false,
+
+  "_notify": "Notifikasi temuan ke Telegram dan/atau Discord (opsional). Isi botToken+chatId untuk Telegram atau webhookUrl untuk Discord. Biarkan kosong untuk menonaktifkan. includePrivKey TIDAK disarankan — default false hanya kirim alamat & saldo.",
   "notify": {
-    "telegram": { "botToken": "", "chatId": "" },
-    "discord":  { "webhookUrl": "" },
+    "telegram":       { "botToken": "", "chatId": "" },
+    "discord":        { "webhookUrl": "" },
     "notifyStart":    true,
     "notifyFinish":   true,
     "includePrivKey": false
