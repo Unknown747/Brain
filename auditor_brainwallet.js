@@ -34,7 +34,7 @@ const logger = require("./lib/logger");
 const { createRateLimiter, runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
 const {
     balanceMulti, codeOfMulti, tokenBalancesMulti,
-    chainName, chainBatchSize, addRpcs,
+    chainName, chainBatchSize, addRpcs, rpcChainStatus,
 } = require("./lib/etherscan");
 const { deriveAll }              = require("./lib/derive");
 const { generateVariants }       = require("./lib/candidates");
@@ -492,6 +492,11 @@ async function runAudit(overrides = {}) {
                 (dt / 1000).toFixed(1),
                 speed, etaStr
             );
+
+            // Dashboard RPC live — snapshot per chain di antara blok.
+            try {
+                logger.rpcPulse(rpcChainStatus(), rpcStats.byLabel());
+            } catch {}
 
             // Checkpoint: simpan progres + AddressCache + seenVariants.
             // seenVariants dibatasi 500K entri supaya checkpoint tidak meledak.
