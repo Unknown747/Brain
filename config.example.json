@@ -13,7 +13,7 @@
   "autoDiscoverRpcs": false,
 
   "_comment_tuning": "Tuning kinerja — biasanya tidak perlu diubah.",
-  "chunkSize":   1000,
+  "chunkSize":   500,
   "concurrency": 5,
   "rateLimit":   5,
   "batchSize":   80,
@@ -37,7 +37,7 @@
 
   "_pilihan_koin":      "eth, btc, btc-bech32, ltc, doge, bch, dash, zec, sol, ada",
   "_pilihan_chain":     "1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum  10=Optimism  8453=Base  43114=Avalanche  100=Gnosis  59144=Linea  534352=Scroll  324=zkSync  25=Cronos  42220=Celo  1284=Moonbeam  5000=Mantle  81457=Blast  204=opBNB  1101=zkEVM  (250=Fantom — opsional)",
-  "_pilihan_strategi":  "sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5, pbkdf2, scrypt, hmacBitcoinSeed, bip39Seed, argon2 (mahal)",
+  "_pilihan_strategi":  "Default cepat (10): sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5, pbkdf2, scrypt, hmacBitcoinSeed, bip39Seed. Opsional MAHAL (5, aktifkan manual): argon2, argon2d, bip44eth (BIP39→m/44'/60'/0'/0/0), electrum (Electrum 2.x), warpwallet (~detik/derive)",
   "_pilihan_intensity": "light | medium | heavy",
   "_pilihan_logLevel":  "debug | info | warn | error"
 }

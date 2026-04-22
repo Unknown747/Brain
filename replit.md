@@ -49,20 +49,34 @@ URL). CLI args selalu mengalahkan config.json.
 | **SOL** | RPC publik Solana (getMultipleAccounts, multi-endpoint failover) |
 | **ADA** Shelley enterprise (`addr1...`) | api.koios.rest |
 
-## Strategi derivasi (10 default + 1 opsional)
-| Nama | Deskripsi |
-|------|-----------|
-| sha256 | SHA-256 standar — paling umum |
-| doubleSha256 | SHA-256(SHA-256) — era awal |
-| keccak256 | Hash native Ethereum |
-| sha256NoSpace | SHA-256 tanpa spasi |
-| sha256Lower | SHA-256 lowercase |
-| md5 | SHA-256(MD5) — pola brainwallet 2011–2013 |
-| pbkdf2 | PBKDF2-SHA256, salt="brainwallet", 2048 iter |
-| scrypt | Brainwallet.io 2013–2015 (N=2¹⁴, r=8, p=1) |
-| hmacBitcoinSeed | HMAC-SHA512 key="Bitcoin seed" → master BIP32 |
-| bip39Seed | PBKDF2-SHA512 salt="mnemonic" → BIP39 seed |
-| **argon2** (opsional) | Argon2id m=4MB, t=1 — aktifkan manual karena mahal |
+## Strategi derivasi (10 default cepat + 5 opsional mahal)
+Default selalu dipakai setiap audit. Opsional **TIDAK** dipakai kecuali Anda
+menambahkannya manual lewat `--strategies=...` atau `config.json` — jadi
+kecepatan generasi brainwallet default tidak ikut melambat.
+
+| Nama | Deskripsi | Biaya/derive |
+|------|-----------|--------------|
+| sha256 | SHA-256 standar — paling umum | mikrodetik |
+| doubleSha256 | SHA-256(SHA-256) — era awal | mikrodetik |
+| keccak256 | Hash native Ethereum | mikrodetik |
+| sha256NoSpace | SHA-256 tanpa spasi | mikrodetik |
+| sha256Lower | SHA-256 lowercase | mikrodetik |
+| md5 | SHA-256(MD5) — pola brainwallet 2011–2013 | mikrodetik |
+| pbkdf2 | PBKDF2-SHA256, salt="brainwallet", 2048 iter | <1 ms |
+| scrypt | Brainwallet.io 2013–2015 (N=2¹⁴, r=8, p=1) | ~30–80 ms |
+| hmacBitcoinSeed | HMAC-SHA512 key="Bitcoin seed" → master BIP32 | mikrodetik |
+| bip39Seed | PBKDF2-SHA512 salt="mnemonic" → BIP39 seed | <1 ms |
+| **argon2** (opsional) | Argon2id m=4MB, t=1 | ~50–150 ms |
+| **argon2d** (opsional) | Argon2d  m=4MB, t=1 — varian data-dependent | ~50–150 ms |
+| **bip44eth** (opsional) | BIP39 seed → BIP32 m/44'/60'/0'/0/0 (path MetaMask) | ~1 ms |
+| **electrum** (opsional) | PBKDF2-SHA512 salt="electrum" 2048 iter (Electrum 2.x) | <1 ms |
+| **warpwallet** (opsional) | scrypt(N=2¹⁸) XOR PBKDF2(2¹⁶) — KDF asli WarpWallet | **~1–3 detik** |
+
+Contoh aktifkan strategi opsional:
+```
+node index.js --strategies=sha256,bip44eth,electrum
+node index.js --strategies=warpwallet --limit=200   # warpwallet sangat lambat
+```
 
 ## Fitur utama
 - **Scraper cerdas** dengan stop-words 8 bahasa (EN/ID/ES/RU/AR/JP/KR/ZH)
@@ -84,7 +98,7 @@ URL). CLI args selalu mengalahkan config.json.
 - **Resume cerdas** (#23): checkpoint v2 menyimpan `AddressCache` &
   `seenVariants` — alamat yang sudah pernah dicek tidak diulang
 - **Pratinjau cepat** `--preview=N`
-- **Unit tests** (`npm test`) — 25 test untuk derive/candidates/scraper/multicoin
+- **Unit tests** (`npm test`) — 27 test untuk derive/candidates/scraper/multicoin
 
 ## Struktur
 ```
@@ -96,7 +110,7 @@ lib/scraper.js             Scrape URL + ekstraksi kata/frasa/tahun + stop-words 
 lib/scrapeCache.js         Cache persisten kata/frasa antar sesi
 lib/sources.js             Preset URL bawaan (einstein, bible, crypto-pioneers, …)
 lib/candidates.js          Generator varian mutasi + kombinasi tahun-konteks
-lib/derive.js              11 strategi derivasi (10 default + argon2 opsional)
+lib/derive.js              15 strategi derivasi (10 default + 5 opsional: argon2/argon2d/bip44eth/electrum/warpwallet)
 lib/etherscan.js           18 chain EVM + JSON-RPC batch + fallback + getCode + tokenBalances
 lib/multicoin.js           9 koin non-EVM (BTC legacy/bech32, LTC, DOGE, BCH, DASH, ZEC, SOL, ADA)
 lib/tokens.js              Registry ERC-20 untuk 18 chain
@@ -130,4 +144,4 @@ tests/                     Unit tests (derive, candidates, scraper, multicoin)
 - `Auditor` — `node index.js` (interaktif)
 
 ## Tes
-- `npm test` — 25 unit test, semua harus lulus.
+- `npm test` — 27 unit test, semua harus lulus.

@@ -40,10 +40,32 @@ test("derive: strategi tidak dikenal di-skip diam-diam", () => {
     assert.equal(out.length, 2);
 });
 
-test("derive: registry STRATEGIES berisi 11 strategi (10 default + argon2)", () => {
+test("derive: registry STRATEGIES berisi 15 strategi (10 default + 5 opsional)", () => {
     const expected = [
         "sha256","doubleSha256","keccak256","sha256NoSpace","sha256Lower","md5",
-        "pbkdf2","scrypt","hmacBitcoinSeed","bip39Seed","argon2",
+        "pbkdf2","scrypt","hmacBitcoinSeed","bip39Seed",
+        "argon2","argon2d","bip44eth","electrum","warpwallet",
     ];
     for (const k of expected) assert.equal(typeof STRATEGIES[k], "function", `strategi hilang: ${k}`);
+});
+
+test("derive: bip44eth & electrum menghasilkan kunci 32-byte yang valid & deterministik", () => {
+    const a = deriveAll("hello world", ["bip44eth", "electrum"]);
+    const b = deriveAll("hello world", ["bip44eth", "electrum"]);
+    assert.equal(a.length, 2);
+    for (const r of a) {
+        assert.match(r.privHex, /^0x[0-9a-f]{64}$/);
+        assert.match(r.address, /^0x[0-9a-fA-F]{40}$/);
+    }
+    assert.equal(a[0].privHex, b[0].privHex);
+    assert.equal(a[1].privHex, b[1].privHex);
+});
+
+test("derive: bip44eth path m/44'/60'/0'/0/0 cocok dengan well-known mnemonic test vector", () => {
+    // Mnemonic standar BIP39 "abandon abandon ... about" (test vector resmi)
+    // → BIP44 m/44'/60'/0'/0/0 → 0x9858EfFD232B4033E47d90003D41EC34EcaEda94
+    const phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const out = deriveAll(phrase, ["bip44eth"]);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].address.toLowerCase(), "0x9858effd232b4033e47d90003d41ec34ecaeda94");
 });
