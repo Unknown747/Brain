@@ -1,7 +1,7 @@
 {
   "_comment": "Salin file ini menjadi config.json dan sesuaikan nilainya. config.json sudah ada di .gitignore.",
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161",
+  "chains":      "1,10,56,137,8453,42161,43114",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "chunkSize":   1000,
   "concurrency": 5,

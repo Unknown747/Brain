@@ -3,7 +3,7 @@
   "_comment_2": "Argumen CLI (--xxx=yyy) selalu mengalahkan nilai di sini.",
 
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161",
+  "chains":      "1,10,56,137,8453,42161,43114",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "intensity":   "medium",
 
@@ -15,7 +15,7 @@
   "logLevel":    "info",
 
   "_pilihan_koin":      "eth, btc, ltc, doge, sol",
-  "_pilihan_chain":     "1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum",
+  "_pilihan_chain":     "1=Ethereum 10=Optimism 56=BNB 137=Polygon 8453=Base 42161=Arbitrum 43114=Avalanche",
   "_pilihan_strategi":  "sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5",
   "_pilihan_intensity": "light | medium | heavy",
   "_pilihan_logLevel":  "debug | info | warn | error"
