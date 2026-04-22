@@ -143,7 +143,8 @@ async function main() {
     logger.banner();
     process.stdout.write(`  \x1b[90mMasukkan URL atau nama preset (pisahkan dengan koma jika >1).\x1b[0m\n`);
     process.stdout.write(`  \x1b[90mPreset: einstein, shakespeare, twain, proverbs, bible, quran,\x1b[0m\n`);
-    process.stdout.write(`  \x1b[90m         taoteching, bitcoin, movies, quotes  (lihat: --sources)\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         taoteching, bitcoin, movies, quotes, wikiquote-mix\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         (lihat semuanya: --sources)\x1b[0m\n`);
     process.stdout.write(`  \x1b[90mContoh: einstein  atau  https://en.wikipedia.org/wiki/Bitcoin\x1b[0m\n\n`);
     process.stdout.write(`  \x1b[33mCatatan:\x1b[0m \x1b[90mCache alamat tidak disimpan — setiap sesi dimulai dari awal.\x1b[0m\n\n`);
 
