@@ -45,38 +45,21 @@ function showHelp() {
     console.log(`
 Brainwallet Auditor — alat riset keamanan brainwallet
 
-Penggunaan:
-  node index.js                          Tanya URL/preset, audit semua koin default
-  node index.js --urls=einstein          Pakai preset bawaan langsung (non-interaktif)
-  node index.js --urls=einstein,bitcoin  Gabung beberapa preset/URL (dipisah koma)
-  node index.js --urls=all               Audit semua preset bawaan sekaligus
-  node index.js --sources                Tampilkan daftar preset URL bawaan
+Penggunaan dasar:
+  node index.js                          Tanya URL/preset (interaktif)
+  node index.js --urls=einstein          Langsung pakai preset bawaan
+  node index.js --urls=einstein,bitcoin  Gabung beberapa preset/URL
+  node index.js --sources                Lihat daftar preset bawaan
   node decrypt.js                        Tampilkan isi hallazgos.enc
 
-Filter audit:
-  --coins=eth,btc,sol                    Batasi koin (default: semua)
-  --chains=1,56                          Batasi chain EVM (default: 1,56,137,42161)
-  --strategies=sha256,md5                Batasi strategi hashing (default: semua 6)
+Opsi yang sering dipakai:
   --intensity=light|medium|heavy         Tingkat mutasi (default: medium)
-  --preview=20                           Cetak 20 item teratas hasil scrape lalu keluar
-                                         (sanity check, tidak cek saldo)
-
-Tuning kinerja:
-  --chunkSize=1000                       Kata per blok
-  --concurrency=5                        Permintaan paralel per chain EVM
-  --rateLimit=5                          Request/detik (EVM)
-  --batchSize=100                        Alamat per batch RPC EVM
-
-Lain-lain:
-  --logLevel=info|warn|error             Tingkat log
+  --preview=20                           Cek 20 item teratas, tidak audit saldo
   --help                                 Tampilkan bantuan ini
 
-Koin              : eth, btc, ltc, doge, sol
-Chain EVM         : 1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum
-Strategi derivasi : sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5
-
-Konfigurasi default dapat disimpan di config.json (lihat config.example.json).
-Argumen CLI selalu mengalahkan config.json.
+Pengaturan lanjutan (koin, chain, strategi, tuning kinerja):
+  Edit config.json — lihat config.example.json untuk daftar lengkap.
+  Argumen CLI selalu mengalahkan config.json.
 `);
 }
 
