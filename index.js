@@ -142,6 +142,14 @@ async function main() {
         logger.error("Tidak ada URL yang valid.");
         process.exit(1);
     }
+
+    // Tanya intensitas hanya kalau belum di-set lewat CLI atau config.json.
+    if (!args.intensity && !config.intensity) {
+        process.stdout.write(`\n  \x1b[90mIntensitas mutasi: light = cepat, medium = seimbang, heavy = luas\x1b[0m\n`);
+        const ans = (await prompt(`  \x1b[36m\x1b[1mIntensitas\x1b[0m (light/medium/heavy) [medium] > `)).trim().toLowerCase();
+        if (["light", "medium", "heavy"].includes(ans)) opts.intensity = ans;
+    }
+
     await runAudit(opts);
 }
 
