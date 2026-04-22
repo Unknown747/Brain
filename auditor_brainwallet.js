@@ -217,8 +217,9 @@ async function runAudit(overrides = {}) {
 
     const ctx = {
         aesKey,
-        limiter: createRateLimiter(opts.rateLimit),
-        cache:   new AddressCache(),
+        limiter:      createRateLimiter(opts.rateLimit),
+        cache:        new AddressCache(),
+        seenVariants: new Set(),   // dedup varian antar blok
     };
 
     try {
@@ -275,7 +276,10 @@ async function runAudit(overrides = {}) {
         const totalBlocks = chunks.length;
 
         for (let i = startBlock; i < totalBlocks; i++) {
-            const candidates = generateVariants(chunks[i], { intensity: opts.intensity });
+            const candidates = generateVariants(chunks[i], {
+                intensity: opts.intensity,
+                seen:      ctx.seenVariants,
+            });
             const t0 = Date.now();
             const r  = await processBlock(candidates, opts, ctx);
             const dt = Date.now() - t0;
