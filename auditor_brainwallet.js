@@ -47,6 +47,7 @@ const { discoverRpcs }           = require("./lib/chainlist");
 const notify                     = require("./lib/notify");
 const scrapeCache                = require("./lib/scrapeCache");
 const rpcStats                   = require("./lib/rpcStats");
+const httpStats                  = require("./lib/httpStats");
 
 const CHECKPOINT_FILE = "progress.json";
 
@@ -593,7 +594,7 @@ function finalize(stats, startTime, cumCoinStats, ctx) {
     }
     logger.coinSummary(cumCoinStats);
     logger.rpcSummary(rpcStats.snapshot());
-    logger.httpRetrySummary(require("./lib/httpStats").snapshot());
+    logger.httpRetrySummary(httpStats.snapshot());
     logger.summary(stats, formatDuration(Date.now() - startTime));
     try { rpcHealthCache.save(rpcStats.snapshot()); } catch {}
     return stats;
