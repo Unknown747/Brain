@@ -58,6 +58,8 @@ Opsi yang sering dipakai:
   --limit=1000                           Batasi jumlah token yang diaudit (untuk uji coba)
   --checkContracts=true|false            Deteksi alamat contract di EVM (default: true)
   --checkTokens=true|false               Cek saldo ERC-20 utama (default: true)
+  --tokenScope=rich|all                  Cek token hanya alamat dengan native>0 (rich, default)
+                                         atau semua alamat (all, jauh lebih lambat)
   --autoDiscoverRpcs=true|false          Tarik RPC tambahan dari chainlist.org (default: false)
   --help                                 Tampilkan bantuan ini
 

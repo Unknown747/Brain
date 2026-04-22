@@ -50,7 +50,7 @@ const rpcStats                   = require("./lib/rpcStats");
 const CHECKPOINT_FILE = "progress.json";
 
 const DEFAULTS = {
-    chunkSize:        1000,
+    chunkSize:        500,
     concurrency:      5,
     rateLimit:        5,
     batchSize:        80,
@@ -65,6 +65,8 @@ const DEFAULTS = {
     foundFile:        "found.txt",
     checkContracts:   true,    // #3 — deteksi smart contract
     checkTokens:      true,    // #4 — cek ERC-20 untuk chain yang tokens-nya didaftarkan
+    tokenScope:       "rich",  // "rich" = hanya alamat dengan native > 0 (cepat, default)
+                               // "all"  = cek SEMUA alamat (lambat, mahal RPC)
     autoDiscoverRpcs: false,   // #25 — tarik RPC tambahan dari chainlist.org
     notify:           {},      // #19 — { telegram:{...}, discord:{...} }
 };
@@ -194,20 +196,42 @@ async function processBlock(candidates, opts, ctx) {
                 }
 
                 // (a) Token-check ERC-20 (kalau diaktifkan & chain punya daftar token).
+                // Default scope = "rich": hanya alamat dengan native > 0 (cepat).
+                // Scope "all": cek SEMUA alamat (mahal — ratusan ribu eth_call).
                 let tokenMap = new Map();
                 if (opts.checkTokens && chainHasTokens(chainId)) {
                     const tokenList = Object.entries(tokensForChain(chainId))
                         .map(([symbol, info]) => ({ symbol, ...info }));
-                    // Cek SEMUA alamat untuk token (bukan hanya yang punya native > 0).
-                    for (const { batch } of results) {
-                        try {
-                            const tm = await tokenBalancesMulti(chainId, batch, tokenList, ctx.limiter);
+
+                    let tokenTargets;
+                    if (opts.tokenScope === "all") {
+                        tokenTargets = batches; // semua batch alamat
+                    } else {
+                        // Hanya alamat dengan native > 0, dipotong ulang ke batch kecil.
+                        const richList = [...richAddrs];
+                        tokenTargets = chunkArray(richList, sz);
+                    }
+
+                    if (tokenTargets.length > 0) {
+                        let tokDone = 0;
+                        const tokTasks = tokenTargets.map((batch) => async () => {
+                            try {
+                                const tm = await tokenBalancesMulti(chainId, batch, tokenList, ctx.limiter);
+                                tokDone++;
+                                logger.coinBatch(`TOK/${chainName(chainId)}`, tokDone, tokenTargets.length, batch.length);
+                                return tm;
+                            } catch (e) {
+                                tokDone++;
+                                logger.warn(`token ${chainName(chainId)}: ${e.message}`);
+                                return new Map();
+                            }
+                        });
+                        const tokResults = await runWithConcurrency(tokTasks, opts.concurrency);
+                        for (const tm of tokResults) {
                             for (const [addr, toks] of tm.entries()) {
                                 tokenMap.set(addr, toks);
-                                richAddrs.add(addr);   // alamat punya token → ikut contract-check
+                                richAddrs.add(addr);
                             }
-                        } catch (e) {
-                            logger.warn(`token ${chainName(chainId)}: ${e.message}`);
                         }
                     }
                 }

@@ -20,6 +20,7 @@ node index.js --strategies=sha256,md5  # batasi strategi hashing
 node index.js --intensity=heavy        # tingkat mutasi: light | medium | heavy
 node index.js --checkContracts=false   # matikan deteksi smart-contract
 node index.js --checkTokens=false      # matikan cek ERC-20
+node index.js --tokenScope=all         # cek ERC-20 utk SEMUA alamat (default: rich saja)
 node index.js --autoDiscoverRpcs=true  # tarik RPC tambahan dari chainlist.org
 node index.js --preview=30             # pratinjau item teratas
 node decrypt.js                        # tampilkan isi hallazgos.enc
