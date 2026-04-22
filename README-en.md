@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Purpose](https://img.shields.io/badge/Purpose-Security_Research-red.svg)](#security)
-[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#default-configuration)
+[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum_Optimism_Base_Avalanche-purple.svg)](#default-configuration)
 [![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_SOL-orange.svg)](#default-configuration)
 
 ---
@@ -17,7 +17,7 @@
 1. Fetches text from URLs → extracts **priority phrases** (title, headings, blockquotes, quoted strings), **regular phrases** (4–10 word sentences + 3/4/5-grams), and **single words**.
 2. Generates thousands of **mutation variants** (case, suffix, prefix, year, leetspeak, camelCase/PascalCase/snake_case/kebab-case/phrase-initials).
 3. Derives private keys using **6 different hashing strategies**.
-4. Checks balances across **8 blockchain networks** in parallel (4 EVM + BTC, LTC, DOGE, SOL).
+4. Checks balances across **11 blockchain networks** in parallel (7 EVM + BTC, LTC, DOGE, SOL).
 5. Auto-retries with exponential backoff on API failure.
 6. **Three-layer dedup** — tokens, mutation variants, and addresses are each processed only once.
 7. Saves checkpoints — can resume if the process is interrupted (Ctrl+C).
@@ -55,10 +55,11 @@ When run without flags, the tool asks for a URL/preset, then the mutation intens
 | **Intensity levels** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
 | **Cross-block variant dedup** | Variants seen in any earlier block are **not re-processed** |
 | **6 hashing strategies** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
-| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (configurable) |
+| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche (configurable) |
+| **Multi-RPC fallback + circuit breaker** | 7–8 public endpoints per chain; failed endpoints auto-cooldown 60s, sticky to last-good endpoint |
+| **Wikipedia-aware scraper** | Strips wiki artifacts (`[edit]`, `[citation needed]`, "From Wikipedia…") + extracts proper-noun bigrams (e.g. "Kobe Bryant") as priority candidates |
 | **Non-EVM coins** | BTC, LTC, DOGE, SOL |
 | **JSON-RPC batch (EVM)** | Many addresses per request — much faster |
-| **Multi-RPC fallback** | Auto-switches endpoint if one RPC fails/times out |
 | **RPC health table** | See which endpoint was used & how often it failed at session end |
 | **Auto-retry** | Exponential backoff on API failure (max 3×) |
 | **Parallel checks** | All coins & chains checked simultaneously |
@@ -138,6 +139,7 @@ node index.js --urls=einstein,bitcoin          # Combine multiple presets/URLs
 node index.js --urls=all                       # Audit all built-in presets
 node index.js --urls=einstein --preview=20     # Show top-20 items, skip balance audit
 node index.js --urls=einstein --intensity=heavy
+node index.js --urls=https://en.wikipedia.org/wiki/Kobe --limit=1000  # Cap to 1000 tokens (smoke test)
 node index.js --sources                        # List built-in presets
 node index.js --help                           # Help
 ```
@@ -168,13 +170,13 @@ Copy `config.example.json` to `config.json` and tweak as needed:
 ```json
 {
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161",
+  "chains":      "1,56,137,42161,10,8453,43114",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "intensity":   "medium",
   "chunkSize":   1000,
   "concurrency": 5,
   "rateLimit":   5,
-  "batchSize":   100,
+  "batchSize":   80,
   "logLevel":    "info"
 }
 ```
@@ -227,7 +229,7 @@ Derive private key  ── 6 hashing strategies
    │
    ▼
 Parallel balance checks (per coin & chain)   ← in-memory address dedup
-   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum  (JSON-RPC batch + fallback)
+   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche  (JSON-RPC batch + circuit breaker)
    ├── BTC  → blockchain.info  (+ mempool.space fallback)
    ├── LTC  → Blockchair
    ├── DOGE → Blockchair
@@ -244,14 +246,14 @@ Findings → hallazgos.enc (AES-256-GCM) + found.txt
 
 | Parameter | Value | Description |
 |---|---|---|
-| `chains` | 1, 56, 137, 42161 | ETH · BNB Chain · Polygon · Arbitrum |
+| `chains` | 1, 56, 137, 42161, 10, 8453, 43114 | ETH · BNB Chain · Polygon · Arbitrum · Optimism · Base · Avalanche |
 | `coins` | eth, btc, ltc, doge, sol | All supported coins |
 | `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | All strategies |
 | `intensity` | medium | Mutation level (light / medium / heavy) |
 | `chunkSize` | 1000 | Words per block |
 | `concurrency` | 5 | Parallel requests per EVM chain |
 | `rateLimit` | 5 | Requests/second (EVM) |
-| `batchSize` | 100 | Addresses per EVM RPC batch |
+| `batchSize` | 80 | Addresses per EVM JSON-RPC batch (auto-split if too large) |
 | `logLevel` | info | debug / info / warn / error |
 
 ---

@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Tujuan](https://img.shields.io/badge/Tujuan-Riset_Keamanan-red.svg)](#keamanan)
-[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#konfigurasi-default)
+[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum_Optimism_Base_Avalanche-purple.svg)](#konfigurasi-default)
 [![Koin](https://img.shields.io/badge/Koin-BTC_LTC_DOGE_SOL-orange.svg)](#konfigurasi-default)
 
 ---
@@ -17,7 +17,7 @@
 1. Mengambil teks dari URL → mengekstrak **frasa prioritas** (judul, heading, blockquote, kutipan), **frasa biasa** (kalimat 4–10 kata + n-gram 3/4/5), dan **kata tunggal**.
 2. Menghasilkan ribuan **varian mutasi** (case, suffix, prefix, tahun, leetspeak, camelCase/PascalCase/snake_case/kebab-case/inisial-frasa).
 3. Menurunkan private key memakai **6 strategi hashing** berbeda.
-4. Mengecek saldo di **8 jaringan blockchain** secara paralel (4 EVM + BTC, LTC, DOGE, SOL).
+4. Mengecek saldo di **11 jaringan blockchain** secara paralel (7 EVM + BTC, LTC, DOGE, SOL).
 5. Retry otomatis (exponential backoff) jika API gagal.
 6. **Dedup berlapis 3** — token, varian mutasi, dan alamat semuanya cuma diproses sekali.
 7. Menyimpan checkpoint — bisa dilanjutkan jika proses dihentikan (Ctrl+C).
@@ -55,10 +55,11 @@ Saat dijalankan tanpa flag, alat akan menanyakan URL/preset, lalu intensitas mut
 | **Tingkat intensitas** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
 | **Dedup varian antar-blok** | Varian yang sudah pernah keluar di blok manapun **tidak diproses ulang** |
 | **6 strategi hashing** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
-| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (dapat dikonfigurasi) |
+| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche (dapat dikonfigurasi) |
 | **Multi-koin non-EVM** | BTC, LTC, DOGE, SOL |
-| **JSON-RPC batch (EVM)** | Banyak alamat per request — jauh lebih cepat |
-| **Multi-RPC fallback** | Otomatis pindah endpoint kalau satu RPC gagal/timeout |
+| **JSON-RPC batch (EVM)** | Banyak alamat per request — jauh lebih cepat (auto-split bila terlalu besar) |
+| **Multi-RPC fallback + circuit breaker** | 7–8 endpoint publik per chain; endpoint yang gagal otomatis di-cooldown 60s & sticky ke endpoint terakhir yang sehat |
+| **Scraper Wikipedia-aware** | Buang artefak wiki (`[edit]`, `[citation needed]`, "From Wikipedia…") + ekstraksi proper-noun bigram (mis. "Kobe Bryant") sebagai kandidat prioritas |
 | **Tabel kesehatan RPC** | Endpoint mana yang dipakai & berapa kali gagal di akhir sesi |
 | **Retry otomatis** | Exponential backoff saat API gagal (maks 3×) |
 | **Pengecekan paralel** | Semua koin & chain dicek bersamaan |
@@ -138,6 +139,7 @@ node index.js --urls=einstein,bitcoin          # Gabung beberapa preset/URL
 node index.js --urls=all                       # Audit semua preset bawaan
 node index.js --urls=einstein --preview=20     # Cek 20 item teratas, tidak audit saldo
 node index.js --urls=einstein --intensity=heavy
+node index.js --urls=https://en.wikipedia.org/wiki/Kobe --limit=1000  # Batasi 1000 token (untuk uji coba)
 node index.js --sources                        # Tampilkan daftar preset bawaan
 node index.js --help                           # Bantuan
 ```
@@ -168,13 +170,13 @@ Salin `config.example.json` ke `config.json` lalu sesuaikan:
 ```json
 {
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161",
+  "chains":      "1,56,137,42161,10,8453,43114",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "intensity":   "medium",
   "chunkSize":   1000,
   "concurrency": 5,
   "rateLimit":   5,
-  "batchSize":   100,
+  "batchSize":   80,
   "logLevel":    "info"
 }
 ```
@@ -227,7 +229,7 @@ Derivasi private key  ── 6 strategi hashing
    │
    ▼
 Cek saldo paralel (per koin & chain)   ← dedup alamat in-memory
-   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum  (JSON-RPC batch + fallback)
+   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche  (JSON-RPC batch + circuit breaker)
    ├── BTC  → blockchain.info  (+ fallback mempool.space)
    ├── LTC  → Blockchair
    ├── DOGE → Blockchair
@@ -244,14 +246,14 @@ Temuan → hallazgos.enc (AES-256-GCM) + found.txt
 
 | Parameter | Nilai | Keterangan |
 |---|---|---|
-| `chains` | 1, 56, 137, 42161 | ETH · BNB Chain · Polygon · Arbitrum |
+| `chains` | 1, 56, 137, 42161, 10, 8453, 43114 | ETH · BNB Chain · Polygon · Arbitrum · Optimism · Base · Avalanche |
 | `coins` | eth, btc, ltc, doge, sol | Semua koin yang didukung |
 | `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | Semua strategi |
 | `intensity` | medium | Tingkat mutasi (light / medium / heavy) |
 | `chunkSize` | 1000 | Kata per blok |
 | `concurrency` | 5 | Permintaan paralel per chain EVM |
 | `rateLimit` | 5 | Request/detik (EVM) |
-| `batchSize` | 100 | Alamat per batch RPC EVM |
+| `batchSize` | 80 | Alamat per batch JSON-RPC EVM (auto-split bila terlalu besar) |
 | `logLevel` | info | debug / info / warn / error |
 
 ---

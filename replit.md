@@ -3,7 +3,7 @@
 Node.js CLI yang men-scrape teks dari URL, mengekstrak frasa prioritas
 (title/heading/blockquote/kutipan) + frasa biasa (kalimat 4–10 kata,
 n-gram 3/4/5) + kata tunggal, menghasilkan varian mutasi yang banyak,
-lalu mengecek saldo di 8 jaringan blockchain (4 EVM + BTC/LTC/DOGE/SOL)
+lalu mengecek saldo di 11 jaringan blockchain (7 EVM + BTC/LTC/DOGE/SOL)
 secara paralel menggunakan API publik gratis tanpa API key.
 
 ## Cara pakai
@@ -34,7 +34,7 @@ CLI args selalu mengalahkan config.json.
 ## Koin & sumber saldo (semua gratis, tanpa API key)
 | Koin | Sumber |
 |------|--------|
-| ETH, BNB, Polygon, Arbitrum (EVM) | RPC publik llamarpc / publicnode |
+| ETH, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche (EVM) | 7–8 RPC publik per chain (publicnode, llamarpc, ankr, drpc, blastapi, 1rpc, …) dengan circuit breaker 60s + sticky last-good |
 | BTC  | blockchain.info (50 alamat per request) |
 | LTC  | blockchair.com (100 per request) |
 | DOGE | blockchair.com (100 per request) |
@@ -59,7 +59,9 @@ CLI args selalu mengalahkan config.json.
 - **Pratinjau cepat**: `--preview=N` → cetak N kandidat teratas tanpa cek saldo (tuning intensity & sumber)
 - **Tingkat intensitas**: `light` / `medium` / `heavy` — atur cakupan vs kecepatan
 - **JSON-RPC batch (EVM)**: 1 request berisi banyak alamat, jauh lebih cepat
-- **Multi-RPC fallback**: ETH/BSC/Polygon/Arbitrum/SOL/BTC otomatis pindah endpoint kalau gagal
+- **Multi-RPC fallback + circuit breaker**: tiap chain EVM punya 7–8 endpoint publik; endpoint yang gagal di-cooldown 60s, sticky ke endpoint terakhir yang sehat, batch otomatis di-split kalau terlalu besar
+- **Scraper Wikipedia-aware**: buang artefak `[edit]`, `[citation needed]`, "From Wikipedia…" + ekstraksi proper-noun bigram (mis. "Kobe Bryant") sebagai kandidat prioritas
+- **CLI `--limit=N`**: batasi jumlah token yang diproses (untuk smoke-test cepat)
 - **Tabel kesehatan RPC**: lihat endpoint mana yang dipakai & berapa kali gagal di akhir sesi
 - **Retry otomatis**: exponential backoff saat API gagal (maks 3×)
 - **Checkpoint & resume**: simpan progres, bisa dilanjutkan setelah Ctrl+C

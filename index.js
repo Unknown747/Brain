@@ -54,7 +54,8 @@ Penggunaan dasar:
 
 Opsi yang sering dipakai:
   --intensity=light|medium|heavy         Tingkat mutasi (default: medium)
-  --preview=20                           Cek 20 item teratas, tidak audit saldo
+  --preview=20                           Lihat 20 item teratas, tidak audit saldo
+  --limit=1000                           Batasi jumlah token yang diaudit (untuk uji coba)
   --help                                 Tampilkan bantuan ini
 
 Pengaturan lanjutan (koin, chain, strategi, tuning kinerja):

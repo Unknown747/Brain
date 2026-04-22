@@ -38,9 +38,9 @@ const DEFAULTS = {
     chunkSize:   1000,
     concurrency: 5,
     rateLimit:   5,
-    batchSize:   100,
+    batchSize:   80,
     intensity:   "medium",
-    chains:      [1, 56, 137, 42161],
+    chains:      [1, 56, 137, 42161, 10, 8453, 43114],
     coins:       ["eth", "btc", "ltc", "doge", "sol"],
     strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
     logLevel:    "info",
@@ -63,6 +63,7 @@ function buildOptions(overrides = {}) {
     if (typeof merged.concurrency === "string") merged.concurrency = parseInt(merged.concurrency, 10);
     if (typeof merged.rateLimit   === "string") merged.rateLimit   = parseInt(merged.rateLimit, 10);
     if (typeof merged.batchSize   === "string") merged.batchSize   = parseInt(merged.batchSize, 10);
+    if (typeof merged.limit       === "string") merged.limit       = parseInt(merged.limit, 10);
     return merged;
 }
 
@@ -255,6 +256,10 @@ async function runAudit(overrides = {}) {
             logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
             words = await scrapeUrls(opts.urls, cache);
             scrapeCache.save(cache);
+            if (opts.limit && opts.limit > 0 && words.length > opts.limit) {
+                logger.info(`Membatasi hasil scrape ke ${opts.limit} token teratas (--limit).`);
+                words = words.slice(0, opts.limit);
+            }
             logger.info(`Total token baru untuk diaudit: ${words.length}`);
             if (words.length === 0) {
                 logger.warn("Tidak ada token baru (semua sudah pernah di-scrape). Berhenti.");
