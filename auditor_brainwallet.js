@@ -593,6 +593,7 @@ function finalize(stats, startTime, cumCoinStats, ctx) {
     }
     logger.coinSummary(cumCoinStats);
     logger.rpcSummary(rpcStats.snapshot());
+    logger.httpRetrySummary(require("./lib/httpStats").snapshot());
     logger.summary(stats, formatDuration(Date.now() - startTime));
     try { rpcHealthCache.save(rpcStats.snapshot()); } catch {}
     return stats;
