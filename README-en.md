@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Purpose](https://img.shields.io/badge/Purpose-Security_Research-red.svg)](#security)
-[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum-purple.svg)](#default-configuration)
+[![EVM](https://img.shields.io/badge/EVM-ETH_OP_BSC_Polygon_Base_Arbitrum_Avalanche-purple.svg)](#default-configuration)
 [![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_SOL-orange.svg)](#default-configuration)
 
 ---
@@ -17,7 +17,7 @@
 1. Fetches text from URLs → extracts **priority phrases** (title, headings, blockquotes, quoted strings), **regular phrases** (4–10 word sentences + 3/4/5-grams), and **single words**.
 2. Generates thousands of **mutation variants** (case, suffix, prefix, year, leetspeak, camelCase/PascalCase/snake_case/kebab-case/phrase-initials).
 3. Derives private keys using **6 different hashing strategies**.
-4. Checks balances across **8 blockchain networks** in parallel (4 EVM + BTC, LTC, DOGE, SOL).
+4. Checks balances across **11 blockchain networks** in parallel (7 EVM + BTC, LTC, DOGE, SOL).
 5. Auto-retries with exponential backoff on API failure.
 6. **Three-layer dedup** — tokens, mutation variants, and addresses are each processed only once.
 7. Saves checkpoints — can resume if the process is interrupted (Ctrl+C).
@@ -55,10 +55,13 @@ When run without flags, the tool asks for a URL/preset, then the mutation intens
 | **Intensity levels** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
 | **Cross-block variant dedup** | Variants seen in any earlier block are **not re-processed** |
 | **6 hashing strategies** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
-| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum (configurable) |
+| **Multi-chain EVM** | Ethereum, Optimism, BNB Chain, Polygon, Base, Arbitrum, Avalanche (configurable) |
 | **Non-EVM coins** | BTC, LTC, DOGE, SOL |
 | **JSON-RPC batch (EVM)** | Many addresses per request — much faster |
+| **Per-chain rate limit** | Each chain has its own rps + batch-size (Arb/OP/Base are stricter) |
 | **Multi-RPC fallback** | Auto-switches endpoint if one RPC fails/times out |
+| **Endpoint blacklist** | Endpoints failing 5× in a row are disabled for 5 minutes, then auto-revived |
+| **Adaptive cooldown** | If every endpoint of a chain hits 429, that chain is paused with exponential backoff (max 30s) |
 | **RPC health table** | See which endpoint was used & how often it failed at session end |
 | **Auto-retry** | Exponential backoff on API failure (max 3×) |
 | **Parallel checks** | All coins & chains checked simultaneously |
@@ -168,7 +171,7 @@ Copy `config.example.json` to `config.json` and tweak as needed:
 ```json
 {
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161",
+  "chains":      "1,10,56,137,8453,42161,43114",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "intensity":   "medium",
   "chunkSize":   1000,
@@ -178,6 +181,8 @@ Copy `config.example.json` to `config.json` and tweak as needed:
   "logLevel":    "info"
 }
 ```
+
+**Supported chain IDs:** `1`=Ethereum · `10`=Optimism · `56`=BNB · `137`=Polygon · `8453`=Base · `42161`=Arbitrum · `43114`=Avalanche.
 
 `config.json` is in `.gitignore` — it won't be committed.
 
@@ -227,7 +232,8 @@ Derive private key  ── 6 hashing strategies
    │
    ▼
 Parallel balance checks (per coin & chain)   ← in-memory address dedup
-   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum  (JSON-RPC batch + fallback)
+   ├── ETH  → Ethereum, Optimism, BNB Chain, Polygon, Base, Arbitrum, Avalanche
+   │         (per-chain rate-limit + batch + 5-min endpoint blacklist)
    ├── BTC  → blockchain.info  (+ mempool.space fallback)
    ├── LTC  → Blockchair
    ├── DOGE → Blockchair
@@ -244,15 +250,17 @@ Findings → hallazgos.enc (AES-256-GCM) + found.txt
 
 | Parameter | Value | Description |
 |---|---|---|
-| `chains` | 1, 56, 137, 42161 | ETH · BNB Chain · Polygon · Arbitrum |
+| `chains` | 1, 10, 56, 137, 8453, 42161, 43114 | ETH · OP · BNB · Polygon · Base · Arb · Avax |
 | `coins` | eth, btc, ltc, doge, sol | All supported coins |
 | `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | All strategies |
 | `intensity` | medium | Mutation level (light / medium / heavy) |
 | `chunkSize` | 1000 | Words per block |
 | `concurrency` | 5 | Parallel requests per EVM chain |
-| `rateLimit` | 5 | Requests/second (EVM) |
-| `batchSize` | 100 | Addresses per EVM RPC batch |
+| `rateLimit` | 5 | Requests/second (global cap; each chain has its own stricter cap) |
+| `batchSize` | 100 | Addresses per EVM RPC batch (global cap; each chain has its own cap) |
 | `logLevel` | info | debug / info / warn / error |
+
+**Per-chain tuning (automatic):** Arbitrum 2 rps × 25 addr · Optimism/Base 3 rps × 50 · ETH/BSC/Polygon/Avax 5 rps × 100. Effective value = `min(opts, per_chain_tuning)` — users can still lower via config.
 
 ---
 
