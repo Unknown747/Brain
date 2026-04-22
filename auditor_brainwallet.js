@@ -554,6 +554,49 @@ async function runAudit(overrides = {}) {
             }).catch(() => {});
         }
 
+        // ── Estimasi sebelum audit dimulai ──────────────────────────────
+        // Kalibrasi cepat: jalankan deriveAll pada 20 sampel dengan strategi
+        // aktif untuk mengukur biaya nyata di mesin ini, lalu ekstrapolasi.
+        try {
+            const sample = words.slice(0, 20);
+            if (sample.length > 0) {
+                const probeVariants = generateVariants(sample, {
+                    intensity: opts.intensity,
+                    seen: new Set(),
+                    years,
+                });
+                const probeN  = Math.min(50, probeVariants.length);
+                const probe   = probeVariants.slice(0, probeN);
+                const t0      = Date.now();
+                for (const p of probe) deriveAll(p, opts.strategies);
+                const probeMs = Math.max(1, Date.now() - t0);
+                const msPerVariant = probeMs / Math.max(1, probeN);
+
+                // Skala variant per item (dari 20 sampel) ke seluruh korpus.
+                const variantsPerItem = probeVariants.length / sample.length;
+                const totalVariantsEst = Math.round(variantsPerItem * words.length);
+
+                // Biaya RPC kira-kira: 6 ms per alamat × jumlah koin (asumsi
+                // batched + paralel + sebagian besar cache-hit).
+                const rpcMsPerVariant = 6 * opts.coins.length;
+                const etaMs = Math.round(totalVariantsEst * (msPerVariant + rpcMsPerVariant));
+
+                const fmtNum = (n) => n.toLocaleString("id-ID");
+                logger.section("Estimasi");
+                logger.info(`Token korpus     : ${fmtNum(words.length)}`);
+                logger.info(`Total varian     : ~${fmtNum(totalVariantsEst)} (${variantsPerItem.toFixed(1)}/token, intensitas ${opts.intensity})`);
+                logger.info(`Total derivasi   : ~${fmtNum(totalVariantsEst * opts.strategies.length)} (${opts.strategies.length} strategi)`);
+                logger.info(`Total cek alamat : ~${fmtNum(totalVariantsEst * opts.strategies.length * opts.coins.length)} (${opts.coins.length} koin)`);
+                logger.info(`Perkiraan waktu  : ~${formatDuration(etaMs)}  (kalibrasi: ${msPerVariant.toFixed(2)} ms/varian)`);
+                if (etaMs > 6 * 3600 * 1000) {
+                    logger.warn("Estimasi >6 jam — pertimbangkan matikan strategi mahal atau intensitas 'light'.");
+                }
+            }
+        } catch (e) {
+            // Estimasi tidak boleh menggagalkan audit.
+            logger.warn(`Gagal hitung estimasi: ${e.message}`);
+        }
+
         logger.section("Proses Audit");
         const chunks      = chunkArray(words, opts.chunkSize);
         const totalBlocks = chunks.length;
