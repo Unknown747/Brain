@@ -23,7 +23,7 @@
 const fs     = require("fs");
 const logger = require("./lib/logger");
 const { createRateLimiter, runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
-const { balanceMulti, chainName } = require("./lib/etherscan");
+const { balanceMulti, chainName, chainBatchSize } = require("./lib/etherscan");
 const { deriveAll } = require("./lib/derive");
 const { generateVariants } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
@@ -40,7 +40,7 @@ const DEFAULTS = {
     rateLimit:   5,
     batchSize:   80,
     intensity:   "medium",
-    chains:      [1, 56, 137, 42161, 10, 8453, 43114],
+    chains:      [1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324],
     coins:       ["eth", "btc", "ltc", "doge", "sol"],
     strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
     logLevel:    "info",
@@ -111,10 +111,14 @@ async function processBlock(candidates, opts, ctx) {
 
         if (coin === "eth") {
             const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
-            const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
+            const allAddr = list.map((x) => x.address);
             for (const chainId of opts.chains) {
-                let evmDone = 0;
-                const tasks = batches.map((batch) => async () => {
+                // Setiap chain dapat batch size sendiri (Arbitrum, Linea dll
+                // pakai batch lebih kecil supaya tidak kena rate-limit).
+                const sz      = chainBatchSize(chainId, opts.batchSize);
+                const batches = chunkArray(allAddr, sz);
+                let evmDone   = 0;
+                const tasks   = batches.map((batch) => async () => {
                     try {
                         const r = await balanceMulti(chainId, batch, ctx.limiter);
                         evmDone++;

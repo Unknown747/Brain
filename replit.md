@@ -3,7 +3,7 @@
 Node.js CLI yang men-scrape teks dari URL, mengekstrak frasa prioritas
 (title/heading/blockquote/kutipan) + frasa biasa (kalimat 4–10 kata,
 n-gram 3/4/5) + kata tunggal, menghasilkan varian mutasi yang banyak,
-lalu mengecek saldo di 11 jaringan blockchain (7 EVM + BTC/LTC/DOGE/SOL)
+lalu mengecek saldo di 15 jaringan blockchain (11 EVM + BTC/LTC/DOGE/SOL)
 secara paralel menggunakan API publik gratis tanpa API key.
 
 ## Cara pakai
@@ -34,7 +34,7 @@ CLI args selalu mengalahkan config.json.
 ## Koin & sumber saldo (semua gratis, tanpa API key)
 | Koin | Sumber |
 |------|--------|
-| ETH, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche (EVM) | 7–8 RPC publik per chain (publicnode, llamarpc, ankr, drpc, blastapi, 1rpc, …) dengan circuit breaker 60s + sticky last-good |
+| ETH, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era (11 EVM) | 7–12 RPC publik per chain (publicnode, llamarpc, ankr, drpc, blastapi, 1rpc, onfinality, omniatech, meowrpc, …) dengan circuit breaker 60s + sticky last-good + race-mode (Arbitrum) |
 | BTC  | blockchain.info (50 alamat per request) |
 | LTC  | blockchair.com (100 per request) |
 | DOGE | blockchair.com (100 per request) |
@@ -59,8 +59,9 @@ CLI args selalu mengalahkan config.json.
 - **Pratinjau cepat**: `--preview=N` → cetak N kandidat teratas tanpa cek saldo (tuning intensity & sumber)
 - **Tingkat intensitas**: `light` / `medium` / `heavy` — atur cakupan vs kecepatan
 - **JSON-RPC batch (EVM)**: 1 request berisi banyak alamat, jauh lebih cepat
-- **Multi-RPC fallback + circuit breaker**: tiap chain EVM punya 7–8 endpoint publik; endpoint yang gagal di-cooldown 60s, sticky ke endpoint terakhir yang sehat, batch otomatis di-split kalau terlalu besar
-- **Scraper Wikipedia-aware**: buang artefak `[edit]`, `[citation needed]`, "From Wikipedia…" + ekstraksi proper-noun bigram (mis. "Kobe Bryant") sebagai kandidat prioritas
+- **Multi-RPC fallback + circuit breaker**: tiap chain EVM punya 7–12 endpoint publik; endpoint yang gagal di-cooldown 60s, sticky ke endpoint terakhir yang sehat, batch otomatis di-split kalau terlalu besar
+- **Per-chain tuning**: chain rate-limit-sensitive (Arbitrum/Linea/Scroll/zkSync) pakai batch lebih kecil (40–50) & timeout lebih longgar (10s); Arbitrum jalan dengan mode "race" (2 endpoint paralel, pemenang menang)
+- **Scraper Wikipedia-aware**: buang artefak `[edit]`, `[citation needed]`, "From Wikipedia…", IPA, ISBN/DOI/arXiv, navbox, hatnote, tanggal-lahir-mati + ekstraksi proper-noun multi-kata (mis. "Kobe Bean Bryant") otomatis dipecah jadi sub-frasa & komponen tunggal sebagai kandidat prioritas; juga harvest `<i>/<em>/<b>/<strong>/<cite>`
 - **CLI `--limit=N`**: batasi jumlah token yang diproses (untuk smoke-test cepat)
 - **Tabel kesehatan RPC**: lihat endpoint mana yang dipakai & berapa kali gagal di akhir sesi
 - **Retry otomatis**: exponential backoff saat API gagal (maks 3×)

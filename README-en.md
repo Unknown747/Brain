@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Purpose](https://img.shields.io/badge/Purpose-Security_Research-red.svg)](#security)
-[![EVM](https://img.shields.io/badge/EVM-ETH_BSC_Polygon_Arbitrum_Optimism_Base_Avalanche-purple.svg)](#default-configuration)
+[![EVM](https://img.shields.io/badge/EVM-11_chains-purple.svg)](#default-configuration)
 [![Coins](https://img.shields.io/badge/Coins-BTC_LTC_DOGE_SOL-orange.svg)](#default-configuration)
 
 ---
@@ -17,7 +17,7 @@
 1. Fetches text from URLs → extracts **priority phrases** (title, headings, blockquotes, quoted strings), **regular phrases** (4–10 word sentences + 3/4/5-grams), and **single words**.
 2. Generates thousands of **mutation variants** (case, suffix, prefix, year, leetspeak, camelCase/PascalCase/snake_case/kebab-case/phrase-initials).
 3. Derives private keys using **6 different hashing strategies**.
-4. Checks balances across **11 blockchain networks** in parallel (7 EVM + BTC, LTC, DOGE, SOL).
+4. Checks balances across **15 blockchain networks** in parallel (11 EVM + BTC, LTC, DOGE, SOL).
 5. Auto-retries with exponential backoff on API failure.
 6. **Three-layer dedup** — tokens, mutation variants, and addresses are each processed only once.
 7. Saves checkpoints — can resume if the process is interrupted (Ctrl+C).
@@ -55,9 +55,12 @@ When run without flags, the tool asks for a URL/preset, then the mutation intens
 | **Intensity levels** | `light` (~5/item) · `medium` (~25/item, default) · `heavy` (~80/item) |
 | **Cross-block variant dedup** | Variants seen in any earlier block are **not re-processed** |
 | **6 hashing strategies** | SHA-256, Double-SHA-256, Keccak-256, SHA-256 (no space), SHA-256 (lower), MD5→SHA-256 |
-| **Multi-chain EVM** | Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche (configurable) |
-| **Multi-RPC fallback + circuit breaker** | 7–8 public endpoints per chain; failed endpoints auto-cooldown 60s, sticky to last-good endpoint |
-| **Wikipedia-aware scraper** | Strips wiki artifacts (`[edit]`, `[citation needed]`, "From Wikipedia…") + extracts proper-noun bigrams (e.g. "Kobe Bryant") as priority candidates |
+| **Multi-chain EVM (11 chains)** | Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era (Fantom 250 optional) |
+| **Per-chain batch & timeout** | Rate-limit-sensitive chains (Arbitrum/Linea/Scroll/zkSync) use smaller batches & longer timeouts |
+| **"Race" mode for Arbitrum** | 2 healthy endpoints fired in parallel — winner wins, the rest are aborted |
+| **Multi-RPC fallback + circuit breaker** | 7–12 public endpoints per chain (drpc, llamarpc, publicnode, ankr, 1rpc, blast, onfinality, omniatech); failed endpoints auto-cooldown 60s, sticky to last-good endpoint |
+| **Wikipedia-aware scraper** | Strips wiki artifacts (`[edit]`, `[citation needed]`, ISBN/DOI/arXiv, navbox, hatnote, IPA, birth-death dates) + extracts proper-nouns and explodes them into sub-phrases & singletons (e.g. "Kobe Bean Bryant" → "Kobe", "Bryant", "Kobe Bean", "Bean Bryant") |
+| **Italics/bold extraction** | `<i>`/`<em>`/`<b>`/`<strong>`/`<cite>` tags also harvested (work titles & key terms) |
 | **Non-EVM coins** | BTC, LTC, DOGE, SOL |
 | **JSON-RPC batch (EVM)** | Many addresses per request — much faster |
 | **RPC health table** | See which endpoint was used & how often it failed at session end |
@@ -170,7 +173,7 @@ Copy `config.example.json` to `config.json` and tweak as needed:
 ```json
 {
   "coins":       "eth,btc,ltc,doge,sol",
-  "chains":      "1,56,137,42161,10,8453,43114",
+  "chains":      "1,56,137,42161,10,8453,43114,100,59144,534352,324",
   "strategies":  "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5",
   "intensity":   "medium",
   "chunkSize":   1000,
@@ -229,7 +232,7 @@ Derive private key  ── 6 hashing strategies
    │
    ▼
 Parallel balance checks (per coin & chain)   ← in-memory address dedup
-   ├── ETH  → Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche  (JSON-RPC batch + circuit breaker)
+   ├── ETH  → Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era  (JSON-RPC batch + race + circuit breaker)
    ├── BTC  → blockchain.info  (+ mempool.space fallback)
    ├── LTC  → Blockchair
    ├── DOGE → Blockchair
@@ -246,7 +249,7 @@ Findings → hallazgos.enc (AES-256-GCM) + found.txt
 
 | Parameter | Value | Description |
 |---|---|---|
-| `chains` | 1, 56, 137, 42161, 10, 8453, 43114 | ETH · BNB Chain · Polygon · Arbitrum · Optimism · Base · Avalanche |
+| `chains` | 1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324 | ETH · BNB · Polygon · Arbitrum · Optimism · Base · Avalanche · Gnosis · Linea · Scroll · zkSync Era |
 | `coins` | eth, btc, ltc, doge, sol | All supported coins |
 | `strategies` | sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5 | All strategies |
 | `intensity` | medium | Mutation level (light / medium / heavy) |
