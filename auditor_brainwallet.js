@@ -167,10 +167,35 @@ async function processBlock(candidates, opts, ctx) {
             const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
             const allAddr = list.map((x) => x.address);
 
+            // Snapshot kesehatan RPC sekali per blok (per koin ETH).
+            const rpcByChain = new Map(rpcChainStatus().map((s) => [s.chainId, s]));
+
             for (const chainId of opts.chains) {
+                // Auto-skip chain kalau RPC-nya sebagian besar sedang cooldown.
+                // Default: skip kalau healthy < 30% dari total dan total > 2.
+                // Chain akan dicoba lagi di blok berikutnya saat cooldown sudah habis.
+                const health = rpcByChain.get(chainId);
+                if (health && health.totalUrls > 2) {
+                    const ratio = health.healthyCount / health.totalUrls;
+                    if (health.healthyCount === 0 || ratio < 0.3) {
+                        logger.warn(
+                            `Skip ${chainName(chainId)} blok ini — ` +
+                            `${health.healthyCount}/${health.totalUrls} RPC sehat ` +
+                            `(cooldown habis dalam ~${Math.ceil(health.nextFreeInMs / 1000)}s)`
+                        );
+                        continue;
+                    }
+                }
+
                 const sz       = chainBatchSize(chainId, opts.batchSize);
                 const batches  = chunkArray(allAddr, sz);
                 let evmDone    = 0;
+
+                // Concurrency adaptif: jangan menumpuk request lebih banyak dari endpoint sehat,
+                // supaya 1 endpoint tidak digempur paralel dan trigger rate-limit.
+                const chainConc = health
+                    ? Math.max(1, Math.min(opts.concurrency, health.healthyCount))
+                    : opts.concurrency;
 
                 // Kumpulan saldo native + alamat non-zero (untuk lanjutan: token + contract).
                 const tasks = batches.map((batch) => async () => {
@@ -185,7 +210,7 @@ async function processBlock(candidates, opts, ctx) {
                         return { batch, balances: new Map() };
                     }
                 });
-                const results = await runWithConcurrency(tasks, opts.concurrency);
+                const results = await runWithConcurrency(tasks, chainConc);
 
                 // Pilih alamat yang akan ikut tahap "kaya" (token-check + contract-check).
                 // Native > 0 selalu wajib. Untuk token-check kita cek SEMUA alamat (banyak
@@ -226,7 +251,7 @@ async function processBlock(candidates, opts, ctx) {
                                 return new Map();
                             }
                         });
-                        const tokResults = await runWithConcurrency(tokTasks, opts.concurrency);
+                        const tokResults = await runWithConcurrency(tokTasks, chainConc);
                         for (const tm of tokResults) {
                             for (const [addr, toks] of tm.entries()) {
                                 tokenMap.set(addr, toks);
