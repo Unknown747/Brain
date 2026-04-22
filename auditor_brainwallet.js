@@ -299,12 +299,19 @@ async function runAudit(overrides = {}) {
                 });
             }
 
-            // Kecepatan & ETA
+            // Kecepatan & ETA — rata² 5 blok terakhir biar lebih responsif
             const elapsedSec = (Date.now() - startTime) / 1000;
             const speed      = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
-            const avgMs      = blockTimes.reduce((a, b) => a + b, 0) / blockTimes.length;
+            const recent     = blockTimes.slice(-5);
+            const avgMs      = recent.reduce((a, b) => a + b, 0) / recent.length;
             const remaining  = totalBlocks - (i + 1);
-            const etaStr     = remaining > 0 ? formatDuration(remaining * avgMs) : "selesai";
+            let   etaStr     = "selesai";
+            if (remaining > 0) {
+                const remMs   = remaining * avgMs;
+                const finish  = new Date(Date.now() + remMs)
+                    .toLocaleTimeString("id-ID", { hour12: false, hour: "2-digit", minute: "2-digit" });
+                etaStr = `${formatDuration(remMs)} (~${finish})`;
+            }
             stats.speed      = speed;
 
             logger.progress(
