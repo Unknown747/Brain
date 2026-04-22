@@ -58,6 +58,8 @@ Filter audit:
   --chains=1,56                          Batasi chain EVM (default: 1,56,137,42161)
   --strategies=sha256,md5                Batasi strategi hashing (default: semua 6)
   --intensity=light|medium|heavy         Tingkat mutasi (default: medium)
+  --preview=20                           Cetak 20 item teratas hasil scrape lalu keluar
+                                         (sanity check, tidak cek saldo)
 
 Tuning kinerja:
   --chunkSize=1000                       Kata per blok
