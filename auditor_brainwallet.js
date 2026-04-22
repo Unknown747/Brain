@@ -199,8 +199,8 @@ async function runAudit(overrides = {}) {
     const blockTimes   = [];
 
     const stats = isResume
-        ? { ...cpData.stats, speed: 0 }
-        : { blocks: 0, fresh: 0, found: 0, candidates: 0, speed: 0 };
+        ? { ...cpData.stats, speed: 0, skipped: cpData.stats?.skipped || 0 }
+        : { blocks: 0, fresh: 0, found: 0, candidates: 0, skipped: 0, speed: 0 };
 
     const cumCoinStats = new Map();
     let   currentCp    = null;
@@ -258,7 +258,7 @@ async function runAudit(overrides = {}) {
             logger.info(`Total token baru untuk diaudit: ${words.length}`);
             if (words.length === 0) {
                 logger.warn("Tidak ada token baru (semua sudah pernah di-scrape). Berhenti.");
-                return finalize(stats, startTime, cumCoinStats);
+                return finalize(stats, startTime, cumCoinStats, ctx);
             }
 
             // --preview=N → tampilkan N item teratas hasil scrape lalu keluar.
@@ -267,7 +267,7 @@ async function runAudit(overrides = {}) {
                 logger.section(`Pratinjau (${Math.min(n, words.length)} item teratas)`);
                 for (const item of words.slice(0, n)) logger.info(`  ${item}`);
                 logger.info(`(${words.length} total — jalankan tanpa --preview untuk audit penuh)`);
-                return finalize(stats, startTime, cumCoinStats);
+                return finalize(stats, startTime, cumCoinStats, ctx);
             }
         }
 
@@ -333,12 +333,15 @@ async function runAudit(overrides = {}) {
     clearCheckpoint();
     currentCp = null;
 
-    return finalize(stats, startTime, cumCoinStats);
+    return finalize(stats, startTime, cumCoinStats, ctx);
 }
 
-function finalize(stats, startTime, cumCoinStats) {
+function finalize(stats, startTime, cumCoinStats, ctx) {
     const elapsedSec = (Date.now() - startTime) / 1000;
     stats.speed = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
+    if (ctx?.seenVariants?.__skipped != null) {
+        stats.skipped = ctx.seenVariants.__skipped;
+    }
     logger.coinSummary(cumCoinStats);
     logger.rpcSummary(rpcStats.snapshot());
     logger.summary(stats, formatDuration(Date.now() - startTime));
