@@ -15,6 +15,7 @@ node index.js --coins=eth,btc,sol      # batasi koin
 node index.js --chains=1,56            # batasi chain EVM
 node index.js --strategies=sha256,md5  # batasi strategi hashing
 node index.js --intensity=heavy        # tingkat mutasi: light | medium | heavy
+node index.js --urls=einstein --preview=30   # pratinjau 30 item teratas, tidak cek saldo
 node decrypt.js                        # tampilkan isi hallazgos.enc
 ```
 
@@ -50,9 +51,11 @@ CLI args selalu mengalahkan config.json.
 
 ## Fitur utama
 - **Scraper cerdas**: HTML dibersihkan dari nav/footer/sidebar/script + filter token sampah (ALL-CAPS panjang, mayoritas digit, fragmen URL)
-- **Frasa nyata**: ekstraksi kalimat utuh 4–10 kata + n-gram 4/5 dari urutan asli teks
+- **Frasa prioritas**: `<title>`, heading h1–h3, `<blockquote>`, dan teks dalam tanda kutip diaudit duluan (sumber brainwallet paling sering)
+- **Frasa nyata**: ekstraksi kalimat utuh 4–10 kata + n-gram 3/4/5 dari urutan asli teks
 - **Stop-words multi-bahasa**: EN + ID + ES (dipakai untuk kata tunggal; frasa tetap mempertahankan stop-words)
-- **Mutasi password**: case, suffix (!, 123, 1234, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse, camelCase/PascalCase untuk frasa
+- **Mutasi password**: case, suffix (!, 123, 1234, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse, camelCase/PascalCase/snake_case/kebab-case + inisial frasa (mis. "tbontb") untuk frasa
+- **Pratinjau cepat**: `--preview=N` → cetak N kandidat teratas tanpa cek saldo (tuning intensity & sumber)
 - **Tingkat intensitas**: `light` / `medium` / `heavy` — atur cakupan vs kecepatan
 - **JSON-RPC batch (EVM)**: 1 request berisi banyak alamat, jauh lebih cepat
 - **Multi-RPC fallback**: ETH/BSC/Polygon/Arbitrum/SOL/BTC otomatis pindah endpoint kalau gagal

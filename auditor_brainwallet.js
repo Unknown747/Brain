@@ -2,10 +2,12 @@
  * auditor_brainwallet.js — orkestrator audit brainwallet.
  *
  * Alur:
- *  1. Scrape teks dari URL → ekstrak kata + frasa nyata (kalimat 4–10 kata, n-gram 4/5).
- *     Token yang sudah pernah di-scrape disaring lewat cache persisten.
+ *  1. Scrape teks dari URL → ekstrak frasa prioritas (title/heading/blockquote/
+ *     teks dalam tanda kutip), frasa biasa (kalimat 4–10 kata + n-gram 3/4/5),
+ *     dan kata tunggal. Token yang sudah pernah di-scrape disaring via cache.
  *  2. Hasilkan varian mutasi: case, suffix, prefix, tahun, leetspeak,
- *     camelCase/PascalCase/no-space (intensitas: light/medium/heavy).
+ *     camelCase/PascalCase/no-space/snake_case/kebab-case + inisial frasa
+ *     (intensitas: light/medium/heavy).
  *  3. Derivasi private key dengan 6 strategi (sha256, doubleSha256, keccak256,
  *     sha256NoSpace, sha256Lower, md5).
  *  4. Cek saldo di 9 jaringan secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/SOL).
@@ -255,6 +257,15 @@ async function runAudit(overrides = {}) {
             logger.info(`Total token baru untuk diaudit: ${words.length}`);
             if (words.length === 0) {
                 logger.warn("Tidak ada token baru (semua sudah pernah di-scrape). Berhenti.");
+                return finalize(stats, startTime, cumCoinStats);
+            }
+
+            // --preview=N → tampilkan N item teratas hasil scrape lalu keluar.
+            if (opts.preview) {
+                const n = Math.max(1, parseInt(opts.preview, 10) || 20);
+                logger.section(`Pratinjau (${Math.min(n, words.length)} item teratas)`);
+                for (const item of words.slice(0, n)) logger.info(`  ${item}`);
+                logger.info(`(${words.length} total — jalankan tanpa --preview untuk audit penuh)`);
                 return finalize(stats, startTime, cumCoinStats);
             }
         }
