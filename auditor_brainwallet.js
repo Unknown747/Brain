@@ -359,14 +359,30 @@ async function runAudit(overrides = {}) {
     // Hidrasi cache kesehatan RPC antar-sesi (otomatis, tanpa flag).
     // Endpoint dengan skor historis terbaik diletakkan paling depan, sehingga
     // sesi baru langsung memilih RPC yang terbukti sehat dari sesi sebelumnya.
+    // Saat load, entri basi (gagal terus selama 7 hari, fail-rate >90%) dibuang
+    // otomatis — endpoint-nya tetap di kode dan akan diuji ulang & masuk cache
+    // lagi kalau sudah pulih.
     try {
+        const fs2 = require("fs");
+        let rawCount = 0;
+        if (fs2.existsSync(rpcHealthCache.FILE)) {
+            try {
+                const raw = JSON.parse(fs2.readFileSync(rpcHealthCache.FILE, "utf8"));
+                if (Array.isArray(raw)) rawCount = raw.length;
+            } catch {}
+        }
         const cached = rpcHealthCache.load();
+        const pruned = rawCount - cached.length;
         if (cached.length > 0) {
             const n = rpcStats.hydrate(cached);
             const touched = reorderByHealth(rpcHealthCache.score) || 0;
             if (n > 0) {
-                logger.info(`Cache RPC dimuat: ${n} entri, ${touched} chain di-reorder berdasar histori`);
+                let msg = `Cache RPC dimuat: ${n} entri, ${touched} chain di-reorder berdasar histori`;
+                if (pruned > 0) msg += ` (${pruned} entri basi dibuang otomatis)`;
+                logger.info(msg);
             }
+        } else if (pruned > 0) {
+            logger.info(`Cache RPC dibersihkan: ${pruned} entri basi dibuang otomatis`);
         }
     } catch {}
 
