@@ -8,7 +8,7 @@
  *     camelCase/PascalCase/no-space (intensitas: light/medium/heavy).
  *  3. Derivasi private key dengan 6 strategi (sha256, doubleSha256, keccak256,
  *     sha256NoSpace, sha256Lower, md5).
- *  4. Cek saldo di 10 jaringan secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/TRX/SOL).
+ *  4. Cek saldo di 9 jaringan secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/SOL).
  *     EVM pakai JSON-RPC batch + multi-endpoint fallback.
  *  5. Retry otomatis saat API gagal (exponential backoff, maks 3x).
  *  6. Checkpoint otomatis — bisa dilanjutkan jika proses dihentikan di tengah jalan.
@@ -39,7 +39,7 @@ const DEFAULTS = {
     batchSize:   100,
     intensity:   "medium",
     chains:      [1, 56, 137, 42161],
-    coins:       ["eth", "btc", "ltc", "doge", "trx", "sol"],
+    coins:       ["eth", "btc", "ltc", "doge", "sol"],
     strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
     logLevel:    "info",
     outFile:     "hallazgos.enc",

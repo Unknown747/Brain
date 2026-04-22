@@ -69,7 +69,7 @@ Lain-lain:
   --logLevel=info|warn|error             Tingkat log
   --help                                 Tampilkan bantuan ini
 
-Koin              : eth, btc, ltc, doge, trx, sol
+Koin              : eth, btc, ltc, doge, sol
 Chain EVM         : 1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum
 Strategi derivasi : sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5
 

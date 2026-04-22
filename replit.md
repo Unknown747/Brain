@@ -36,7 +36,6 @@ CLI args selalu mengalahkan config.json.
 | BTC  | blockchain.info (50 alamat per request) |
 | LTC  | blockchair.com (100 per request) |
 | DOGE | blockchair.com (100 per request) |
-| TRX  | TronGrid |
 | SOL  | RPC publik Solana (getMultipleAccounts, 100 per request) |
 
 ## Strategi derivasi (semua aktif secara default)
@@ -77,7 +76,7 @@ lib/sources.js             Daftar preset URL bawaan (einstein, bible, …, all)
 lib/candidates.js          Generator varian mutasi (light/medium/heavy)
 lib/derive.js              6 strategi derivasi private key
 lib/etherscan.js           RPC publik multi-chain EVM + JSON-RPC batch + fallback
-lib/multicoin.js           Derivasi & saldo BTC/LTC/DOGE/TRX/SOL + retry
+lib/multicoin.js           Derivasi & saldo BTC/LTC/DOGE/SOL + retry
 lib/rpcStats.js            Pelacak kesehatan tiap endpoint RPC
 lib/storage.js             AES-GCM frame, found.txt, AddressCache in-memory
 lib/util.js                chunkArray, rate-limiter, concurrency, withRetry, durasi
