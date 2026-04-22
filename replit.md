@@ -9,28 +9,27 @@ smart-contract, cek saldo ERC-20 utama, notifikasi Telegram/Discord, dan
 resume cerdas.
 
 ## Cara pakai
+**Tidak ada flag CLI.** Semua pengaturan ada di `config.json` (salin dari
+`config.example.json`). Tinggal nyalakan/matikan setiap koin, chain, strategi,
+dan fitur dengan `true`/`false`.
+
 ```
-node index.js                          # tanya URL, cek semua koin default
-node index.js --urls=einstein          # langsung pakai preset bawaan
-node index.js --urls=einstein,bitcoin  # gabung beberapa preset/URL
-node index.js --sources                # daftar preset URL bawaan
-node index.js --coins=eth,btc,sol      # batasi koin
-node index.js --chains=1,56            # batasi chain EVM
-node index.js --strategies=sha256,md5  # batasi strategi hashing
-node index.js --intensity=heavy        # tingkat mutasi: light | medium | heavy
-node index.js --checkContracts=false   # matikan deteksi smart-contract
-node index.js --checkTokens=false      # matikan cek ERC-20
-node index.js --tokenScope=all         # cek ERC-20 utk SEMUA alamat (default: rich saja)
-node index.js --autoDiscoverRpcs=true  # tarik RPC tambahan dari chainlist.org
-node index.js --preview=30             # pratinjau item teratas
-node decrypt.js                        # tampilkan isi hallazgos.enc
-npm test                               # jalankan unit test
+node index.js     # baca config.json; kalau "url" diisi langsung jalan,
+                  # kalau tidak akan tanya URL/preset interaktif
+node decrypt.js   # tampilkan isi hallazgos.enc
+npm test          # jalankan unit test
 ```
 
-## Konfigurasi default (config.json)
-Salin `config.example.json` ke `config.json` untuk menyimpan konfigurasi
-default termasuk blok `notify` (Telegram bot token & chatId, Discord webhook
-URL). CLI args selalu mengalahkan config.json.
+## Konfigurasi (config.json)
+Salin `config.example.json` ke `config.json`. Default sudah dioptimalkan:
+- **Koin aktif default**: eth, btc (legacy + bech32), ltc, doge, sol, ada.
+  BCH/DASH/ZEC dimatikan karena saldo brainwallet di sana praktis nihil.
+- **Chain aktif default**: 8 chain teramai (Ethereum, BNB, Polygon, Arbitrum,
+  Optimism, Base, Avalanche, Linea). Sisanya dimatikan supaya audit cepat.
+- **Strategi aktif default**: 10 strategi cepat. Strategi mahal
+  (argon2/argon2d/bip44eth/electrum/warpwallet) dimatikan default.
+- **Fitur aktif default**: deteksi smart-contract + cek token ERC-20 alamat
+  kaya. Auto-discovery RPC dimatikan (daftar bawaan sudah cukup).
 
 ## Stack
 - Node.js 20

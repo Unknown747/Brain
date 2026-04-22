@@ -51,49 +51,102 @@ const httpStats                  = require("./lib/httpStats");
 
 const CHECKPOINT_FILE = "progress.json";
 
+// Pemetaan slug ramah-manusia → chainId. Dipakai supaya config.json bisa
+// menulis "ethereum: true" alih-alih "1: true".
+const CHAIN_SLUGS = {
+    ethereum: 1, bnb: 56, polygon: 137, arbitrum: 42161, optimism: 10,
+    base: 8453, avalanche: 43114, fantom: 250, gnosis: 100, linea: 59144,
+    scroll: 534352, zksync: 324, cronos: 25, celo: 42220, moonbeam: 1284,
+    mantle: 5000, blast: 81457, opbnb: 204, "polygon-zkevm": 1101,
+};
+
+const ALL_COINS      = ["eth", "btc", "btc-bech32", "ltc", "doge", "bch", "dash", "zec", "sol", "ada"];
+const ALL_STRATEGIES = ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower",
+                        "md5", "pbkdf2", "scrypt", "hmacBitcoinSeed", "bip39Seed",
+                        "argon2", "argon2d", "bip44eth", "electrum", "warpwallet"];
+
+// Default: koin & chain yang biasanya menghasilkan temuan. Sisanya dimatikan
+// supaya audit lebih cepat & tidak boros request ke API publik.
 const DEFAULTS = {
     chunkSize:        500,
     concurrency:      5,
     rateLimit:        5,
     batchSize:        80,
     intensity:        "medium",
-    chains:           [1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324,
-                       25, 42220, 1284, 5000, 81457, 204, 1101],
-    coins:            ["eth", "btc", "btc-bech32", "ltc", "doge", "bch", "dash", "zec", "sol", "ada"],
+    // 8 chain teramai (sisanya bisa diaktifkan via config.json bila perlu).
+    chains:           [1, 56, 137, 42161, 10, 8453, 43114, 59144],
+    // BCH/DASH/ZEC dimatikan default — saldo brainwallet di sini hampir tidak ada.
+    coins:            ["eth", "btc", "btc-bech32", "ltc", "doge", "sol", "ada"],
     strategies:       ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower",
                        "md5", "pbkdf2", "scrypt", "hmacBitcoinSeed", "bip39Seed"],
     logLevel:         "info",
     outFile:          "hallazgos.enc",
     foundFile:        "found.txt",
-    checkContracts:   true,    // #3 — deteksi smart contract
-    checkTokens:      true,    // #4 — cek ERC-20 untuk chain yang tokens-nya didaftarkan
-    tokenScope:       "rich",  // "rich" = hanya alamat dengan native > 0 (cepat, default)
-                               // "all"  = cek SEMUA alamat (lambat, mahal RPC)
-    autoDiscoverRpcs: false,   // #25 — tarik RPC tambahan dari chainlist.org
-    notify:           {},      // #19 — { telegram:{...}, discord:{...} }
+    checkContracts:   true,
+    checkTokens:      true,
+    tokenScope:       "rich",
+    autoDiscoverRpcs: false,
+    notify:           {},
 };
+
+// Konversi nilai config jadi daftar yang aktif. Mendukung 3 bentuk:
+//   - object  : { sha256: true, md5: false }   ← bentuk yang dipromosikan
+//   - array   : ["sha256", "md5"]
+//   - string  : "sha256,md5"
+function toEnabledList(val, validKeys, mapKey = (k) => k) {
+    if (val == null) return null;
+    if (Array.isArray(val)) {
+        return val.map(String).map(mapKey).filter((k) => validKeys.includes(k));
+    }
+    if (typeof val === "string") {
+        return val.split(",").map((s) => mapKey(s.trim())).filter((k) => k && validKeys.includes(k));
+    }
+    if (typeof val === "object") {
+        return Object.entries(val)
+            .filter(([, v]) => v === true || v === 1 || v === "true")
+            .map(([k]) => mapKey(k))
+            .filter((k) => validKeys.includes(k));
+    }
+    return null;
+}
+
+// Khusus chains: nilai bisa nama-slug ("ethereum") atau angka chainId.
+function toChainIds(val) {
+    if (val == null) return null;
+    const resolveOne = (k) => {
+        const s = String(k).trim().toLowerCase();
+        if (CHAIN_SLUGS[s] != null) return CHAIN_SLUGS[s];
+        const n = parseInt(s, 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    if (Array.isArray(val))      return val.map(resolveOne).filter(Boolean);
+    if (typeof val === "string") return val.split(",").map(resolveOne).filter(Boolean);
+    if (typeof val === "object") {
+        return Object.entries(val)
+            .filter(([, v]) => v === true || v === 1 || v === "true")
+            .map(([k]) => resolveOne(k))
+            .filter(Boolean);
+    }
+    return null;
+}
 
 function buildOptions(overrides = {}) {
     const merged = { ...DEFAULTS, ...overrides };
-    if (typeof merged.chains === "string") {
-        merged.chains = merged.chains.split(",").map((s) => parseInt(s.trim(), 10)).filter(Boolean);
+
+    const coinList = toEnabledList(merged.coins, ALL_COINS, (k) => k.toLowerCase());
+    if (coinList && coinList.length > 0) merged.coins = coinList;
+
+    const stratList = toEnabledList(merged.strategies, ALL_STRATEGIES);
+    if (stratList && stratList.length > 0) merged.strategies = stratList;
+
+    const chainList = toChainIds(merged.chains);
+    if (chainList && chainList.length > 0) merged.chains = chainList;
+
+    // Alias ramah-pengguna: scanAllAddressesForTokens=true → tokenScope="all".
+    if (typeof merged.scanAllAddressesForTokens === "boolean") {
+        merged.tokenScope = merged.scanAllAddressesForTokens ? "all" : "rich";
     }
-    if (typeof merged.strategies === "string") {
-        merged.strategies = merged.strategies.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-    if (typeof merged.coins === "string") {
-        merged.coins = merged.coins.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    }
-    if (typeof merged.chunkSize   === "string") merged.chunkSize   = parseInt(merged.chunkSize, 10);
-    if (typeof merged.concurrency === "string") merged.concurrency = parseInt(merged.concurrency, 10);
-    if (typeof merged.rateLimit   === "string") merged.rateLimit   = parseInt(merged.rateLimit, 10);
-    if (typeof merged.batchSize   === "string") merged.batchSize   = parseInt(merged.batchSize, 10);
-    if (typeof merged.limit       === "string") merged.limit       = parseInt(merged.limit, 10);
-    // Boolean flags via CLI string ("true"/"false"/"1"/"0").
-    for (const k of ["checkContracts", "checkTokens", "autoDiscoverRpcs"]) {
-        const v = merged[k];
-        if (typeof v === "string") merged[k] = /^(1|true|yes|on)$/i.test(v);
-    }
+
     return merged;
 }
 

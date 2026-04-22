@@ -1,43 +1,79 @@
 {
-  "_comment_1": "Salin file ini menjadi config.json lalu sesuaikan. config.json sudah di-gitignore.",
-  "_comment_2": "Argumen CLI (--xxx=yyy) selalu mengalahkan nilai di sini.",
+  "_petunjuk": "Salin file ini menjadi config.json, lalu nyalakan/matikan apa yang Anda butuhkan. Tidak ada flag CLI — semua diatur di sini.",
 
-  "coins":      "eth,btc,btc-bech32,ltc,doge,bch,dash,zec,sol,ada",
-  "chains":     "1,56,137,42161,10,8453,43114,100,59144,534352,324,25,42220,1284,5000,81457,204,1101",
-  "strategies": "sha256,doubleSha256,keccak256,sha256NoSpace,sha256Lower,md5,pbkdf2,scrypt,hmacBitcoinSeed,bip39Seed",
-  "intensity":  "medium",
+  "url":       "einstein",
+  "intensity": "medium",
 
-  "_comment_features": "Fitur deteksi & pengecekan tambahan.",
-  "checkContracts":   true,
-  "checkTokens":      true,
-  "autoDiscoverRpcs": false,
+  "_komentar_koin": "Nyalakan koin yang ingin diaudit. BCH/DASH/ZEC dimatikan default karena saldo brainwallet di sana hampir tidak pernah ditemukan.",
+  "coins": {
+    "eth":        true,
+    "btc":        true,
+    "btc-bech32": true,
+    "ltc":        true,
+    "doge":       true,
+    "sol":        true,
+    "ada":        true,
+    "bch":        false,
+    "dash":       false,
+    "zec":        false
+  },
 
-  "_comment_tuning": "Tuning kinerja — biasanya tidak perlu diubah.",
-  "chunkSize":   500,
-  "concurrency": 5,
-  "rateLimit":   5,
-  "batchSize":   80,
-  "logLevel":    "info",
+  "_komentar_chain": "8 chain teramai dinyalakan default. Sisanya dimatikan supaya audit cepat & hemat request RPC.",
+  "chains": {
+    "ethereum":      true,
+    "bnb":           true,
+    "polygon":       true,
+    "arbitrum":      true,
+    "optimism":      true,
+    "base":          true,
+    "avalanche":     true,
+    "linea":         true,
 
-  "_comment_notify": "Notifikasi temuan (opt-in). Hanya kirim alamat + saldo, TIDAK PERNAH private key.",
+    "gnosis":        false,
+    "scroll":        false,
+    "zksync":        false,
+    "cronos":        false,
+    "celo":          false,
+    "moonbeam":      false,
+    "mantle":        false,
+    "blast":         false,
+    "opbnb":         false,
+    "polygon-zkevm": false,
+    "fantom":        false
+  },
+
+  "_komentar_strategi": "10 strategi default cepat. Yang opsional MAHAL (argon2/argon2d/bip44eth/electrum/warpwallet) dimatikan default — nyalakan hanya kalau target spesifik dicurigai memakai KDF tersebut, karena akan memperlambat audit secara signifikan.",
+  "strategies": {
+    "sha256":          true,
+    "doubleSha256":    true,
+    "keccak256":       true,
+    "sha256NoSpace":   true,
+    "sha256Lower":     true,
+    "md5":             true,
+    "pbkdf2":          true,
+    "scrypt":          true,
+    "hmacBitcoinSeed": true,
+    "bip39Seed":       true,
+
+    "argon2":          false,
+    "argon2d":         false,
+    "bip44eth":        false,
+    "electrum":        false,
+    "warpwallet":      false
+  },
+
+  "_komentar_fitur": "Fitur yang benar-benar membantu audit dinyalakan default. autoDiscoverRpcs dimatikan karena daftar RPC bawaan sudah cukup; nyalakan kalau Anda mau menambah endpoint dari chainlist.org.",
+  "checkContracts":            true,
+  "checkTokens":               true,
+  "scanAllAddressesForTokens": false,
+  "autoDiscoverRpcs":          false,
+
+  "_komentar_notify": "Isi kalau mau notifikasi temuan. Private key TIDAK PERNAH dikirim kecuali includePrivKey=true.",
   "notify": {
-    "telegram": {
-      "_petunjuk":  "Buat bot via @BotFather di Telegram, lalu kirim pesan ke bot supaya dapat chatId via https://api.telegram.org/bot<TOKEN>/getUpdates",
-      "botToken":   "",
-      "chatId":     ""
-    },
-    "discord": {
-      "_petunjuk":  "Server Settings → Integrations → Webhooks → New Webhook → Copy URL",
-      "webhookUrl": ""
-    },
+    "telegram": { "botToken": "", "chatId": "" },
+    "discord":  { "webhookUrl": "" },
     "notifyStart":    true,
     "notifyFinish":   true,
     "includePrivKey": false
-  },
-
-  "_pilihan_koin":      "eth, btc, btc-bech32, ltc, doge, bch, dash, zec, sol, ada",
-  "_pilihan_chain":     "1=Ethereum  56=BNB  137=Polygon  42161=Arbitrum  10=Optimism  8453=Base  43114=Avalanche  100=Gnosis  59144=Linea  534352=Scroll  324=zkSync  25=Cronos  42220=Celo  1284=Moonbeam  5000=Mantle  81457=Blast  204=opBNB  1101=zkEVM  (250=Fantom — opsional)",
-  "_pilihan_strategi":  "Default cepat (10): sha256, doubleSha256, keccak256, sha256NoSpace, sha256Lower, md5, pbkdf2, scrypt, hmacBitcoinSeed, bip39Seed. Opsional MAHAL (5, aktifkan manual): argon2, argon2d, bip44eth (BIP39→m/44'/60'/0'/0/0), electrum (Electrum 2.x), warpwallet (~detik/derive)",
-  "_pilihan_intensity": "light | medium | heavy",
-  "_pilihan_logLevel":  "debug | info | warn | error"
+  }
 }
