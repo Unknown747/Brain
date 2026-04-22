@@ -22,8 +22,8 @@
 
 const fs     = require("fs");
 const logger = require("./lib/logger");
-const { createRateLimiter, runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
-const { balanceMulti, chainName } = require("./lib/etherscan");
+const { runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
+const { balanceMulti, chainName, getChainBatchSize } = require("./lib/etherscan");
 const { deriveAll } = require("./lib/derive");
 const { generateVariants } = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
@@ -110,12 +110,15 @@ async function processBlock(candidates, opts, ctx) {
 
         if (coin === "eth") {
             const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
-            const batches = chunkArray(list.map((x) => x.address), opts.batchSize);
+            const allAddr = list.map((x) => x.address);
             for (const chainId of opts.chains) {
+                // Per-chain batch & rps: ambil yang lebih ketat antara opts dan TUNING.
+                const batchSize = Math.min(opts.batchSize, getChainBatchSize(chainId));
+                const batches   = chunkArray(allAddr, batchSize);
                 let evmDone = 0;
                 const tasks = batches.map((batch) => async () => {
                     try {
-                        const r = await balanceMulti(chainId, batch, ctx.limiter);
+                        const r = await balanceMulti(chainId, batch, opts.rateLimit);
                         evmDone++;
                         logger.coinBatch(`ETH/${chainName(chainId)}`, evmDone, batches.length, batch.length);
                         return r;
@@ -217,7 +220,6 @@ async function runAudit(overrides = {}) {
 
     const ctx = {
         aesKey,
-        limiter:      createRateLimiter(opts.rateLimit),
         cache:        new AddressCache(),
         seenVariants: new Set(),   // dedup varian antar blok
     };
