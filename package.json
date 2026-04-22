@@ -1,7 +1,7 @@
 {
   "name": "brainwallet-auditor",
   "version": "1.0.0",
-  "description": "Node.js CLI brainwallet auditor — scrape teks dari URL, derivasi private key dengan 6 strategi hashing, cek saldo di 10 jaringan blockchain (ETH/BSC/Polygon/Arbitrum/BTC/LTC/DOGE/TRX/SOL) via API publik gratis tanpa API key.",
+  "description": "Node.js CLI brainwallet auditor — scrape teks dari URL, derivasi private key dengan 6 strategi hashing, cek saldo di 9 jaringan blockchain (ETH/BSC/Polygon/Arbitrum/BTC/LTC/DOGE/SOL) via API publik gratis tanpa API key.",
   "main": "index.js",
   "bin": {
     "brainwallet-auditor": "index.js"
@@ -19,7 +19,6 @@
     "ethereum",
     "bitcoin",
     "solana",
-    "tron",
     "audit",
     "cli"
   ],
