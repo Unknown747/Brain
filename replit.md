@@ -2,45 +2,53 @@
 
 Node.js CLI yang men-scrape teks dari URL, mengekstrak frasa prioritas
 (title/heading/blockquote/kutipan) + frasa biasa (kalimat 4–10 kata,
-n-gram 3/4/5) + kata tunggal, menghasilkan varian mutasi yang banyak,
-lalu mengecek saldo di 15 jaringan blockchain (11 EVM + BTC/LTC/DOGE/SOL)
-secara paralel menggunakan API publik gratis tanpa API key.
+n-gram 3/4/5) + kata tunggal + tahun-konteks, menghasilkan banyak varian
+mutasi, lalu mengecek saldo di **27 jaringan blockchain** (18 EVM + 9 non-EVM)
+secara paralel via API publik gratis tanpa API key. Termasuk deteksi
+smart-contract, cek saldo ERC-20 utama, notifikasi Telegram/Discord, dan
+resume cerdas.
 
 ## Cara pakai
 ```
 node index.js                          # tanya URL, cek semua koin default
-node index.js --urls=einstein          # langsung pakai preset bawaan (non-interaktif)
+node index.js --urls=einstein          # langsung pakai preset bawaan
 node index.js --urls=einstein,bitcoin  # gabung beberapa preset/URL
 node index.js --sources                # daftar preset URL bawaan
 node index.js --coins=eth,btc,sol      # batasi koin
 node index.js --chains=1,56            # batasi chain EVM
 node index.js --strategies=sha256,md5  # batasi strategi hashing
 node index.js --intensity=heavy        # tingkat mutasi: light | medium | heavy
-node index.js --urls=einstein --preview=30   # pratinjau 30 item teratas, tidak cek saldo
+node index.js --checkContracts=false   # matikan deteksi smart-contract
+node index.js --checkTokens=false      # matikan cek ERC-20
+node index.js --autoDiscoverRpcs=true  # tarik RPC tambahan dari chainlist.org
+node index.js --preview=30             # pratinjau item teratas
 node decrypt.js                        # tampilkan isi hallazgos.enc
+npm test                               # jalankan unit test
 ```
 
-Saat dijalankan, script akan menanyakan URL (bisa lebih dari satu, pisahkan koma).
-Jika ada `progress.json` (checkpoint), script akan menawarkan untuk melanjutkan sesi sebelumnya.
-
 ## Konfigurasi default (config.json)
-Salin `config.example.json` ke `config.json` untuk menyimpan konfigurasi default.
-CLI args selalu mengalahkan config.json.
+Salin `config.example.json` ke `config.json` untuk menyimpan konfigurasi
+default termasuk blok `notify` (Telegram bot token & chatId, Discord webhook
+URL). CLI args selalu mengalahkan config.json.
 
 ## Stack
 - Node.js 20
-- Dependensi: `ethers` saja
+- Dependensi: `ethers`, `@noble/curves`, `@noble/hashes`
 
 ## Koin & sumber saldo (semua gratis, tanpa API key)
 | Koin | Sumber |
 |------|--------|
-| ETH, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era (11 EVM) | 7–12 RPC publik per chain (publicnode, llamarpc, ankr, drpc, blastapi, 1rpc, onfinality, omniatech, meowrpc, …) dengan circuit breaker 60s + sticky last-good + race-mode (Arbitrum) |
-| BTC  | blockchain.info (50 alamat per request) |
-| LTC  | blockchair.com (100 per request) |
-| DOGE | blockchair.com (100 per request) |
-| SOL  | RPC publik Solana (getMultipleAccounts, 100 per request) |
+| **18 EVM** — Ethereum, BNB, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Linea, Scroll, zkSync Era, Cronos, Celo, Moonbeam, Mantle, Blast, opBNB, Polygon zkEVM | 5–12 RPC publik per chain (publicnode, llamarpc, ankr, drpc, blastapi, 1rpc, onfinality, omniatech, meowrpc, …) dengan circuit breaker 60s + sticky last-good + race-mode (Arbitrum). Auto-discovery chainlist.org opsional. |
+| **BTC** legacy (P2PKH `1...`) + bech32 (P2WPKH `bc1...`) | blockchain.info → mempool.space fallback |
+| **LTC** | blockchair.com |
+| **DOGE** | blockchair.com |
+| **BCH** (cashaddr) | blockchair.com |
+| **DASH** | blockchair.com |
+| **ZEC** transparent (`t1...`) | blockchair.com |
+| **SOL** | RPC publik Solana (getMultipleAccounts, multi-endpoint failover) |
+| **ADA** Shelley enterprise (`addr1...`) | api.koios.rest |
 
-## Strategi derivasi (semua aktif secara default)
+## Strategi derivasi (10 default + 1 opsional)
 | Nama | Deskripsi |
 |------|-----------|
 | sha256 | SHA-256 standar — paling umum |
@@ -48,64 +56,77 @@ CLI args selalu mengalahkan config.json.
 | keccak256 | Hash native Ethereum |
 | sha256NoSpace | SHA-256 tanpa spasi |
 | sha256Lower | SHA-256 lowercase |
-| md5 | SHA-256(MD5) — pola brainwallet era 2011–2013 |
+| md5 | SHA-256(MD5) — pola brainwallet 2011–2013 |
+| pbkdf2 | PBKDF2-SHA256, salt="brainwallet", 2048 iter |
+| scrypt | Brainwallet.io 2013–2015 (N=2¹⁴, r=8, p=1) |
+| hmacBitcoinSeed | HMAC-SHA512 key="Bitcoin seed" → master BIP32 |
+| bip39Seed | PBKDF2-SHA512 salt="mnemonic" → BIP39 seed |
+| **argon2** (opsional) | Argon2id m=4MB, t=1 — aktifkan manual karena mahal |
 
 ## Fitur utama
-- **Scraper cerdas**: HTML dibersihkan dari nav/footer/sidebar/script + filter token sampah (ALL-CAPS panjang, mayoritas digit, fragmen URL)
-- **Frasa prioritas**: `<title>`, heading h1–h3, `<blockquote>`, dan teks dalam tanda kutip diaudit duluan (sumber brainwallet paling sering)
-- **Frasa nyata**: ekstraksi kalimat utuh 4–10 kata + n-gram 3/4/5 dari urutan asli teks
-- **Stop-words multi-bahasa**: EN + ID + ES (dipakai untuk kata tunggal; frasa tetap mempertahankan stop-words)
-- **Mutasi password**: case, suffix (!, 123, 1234, 2024…), prefix (the, my…), tahun (1990–2026), leetspeak, reverse, camelCase/PascalCase/snake_case/kebab-case + inisial frasa (mis. "tbontb") untuk frasa
-- **Pratinjau cepat**: `--preview=N` → cetak N kandidat teratas tanpa cek saldo (tuning intensity & sumber)
-- **Tingkat intensitas**: `light` / `medium` / `heavy` — atur cakupan vs kecepatan
-- **JSON-RPC batch (EVM)**: 1 request berisi banyak alamat, jauh lebih cepat
-- **Multi-RPC fallback + circuit breaker**: tiap chain EVM punya 7–12 endpoint publik; endpoint yang gagal di-cooldown 60s, sticky ke endpoint terakhir yang sehat, batch otomatis di-split kalau terlalu besar
-- **Per-chain tuning**: chain rate-limit-sensitive (Arbitrum/Linea/Scroll/zkSync) pakai batch lebih kecil (40–50) & timeout lebih longgar (10s); Arbitrum jalan dengan mode "race" (2 endpoint paralel, pemenang menang)
-- **Scraper Wikipedia-aware**: buang artefak `[edit]`, `[citation needed]`, "From Wikipedia…", IPA, ISBN/DOI/arXiv, navbox, hatnote, tanggal-lahir-mati + ekstraksi proper-noun multi-kata (mis. "Kobe Bean Bryant") otomatis dipecah jadi sub-frasa & komponen tunggal sebagai kandidat prioritas; juga harvest `<i>/<em>/<b>/<strong>/<cite>`
-- **CLI `--limit=N`**: batasi jumlah token yang diproses (untuk smoke-test cepat)
-- **Tabel kesehatan RPC**: lihat endpoint mana yang dipakai & berapa kali gagal di akhir sesi
-- **Retry otomatis**: exponential backoff saat API gagal (maks 3×)
-- **Checkpoint & resume**: simpan progres, bisa dilanjutkan setelah Ctrl+C
-- **Cache in-memory**: tidak ada file cache alamat yang ditulis ke disk
-- **ETA & kecepatan**: live di terminal per blok
-- **Ringkasan per koin**: tabel di akhir sesi
-- **Bell notification**: terminal berbunyi saat wallet berdana ditemukan
+- **Scraper cerdas** dengan stop-words 8 bahasa (EN/ID/ES/RU/AR/JP/KR/ZH)
+- **Frasa prioritas**: title/h1-h3/blockquote/kutipan/proper-noun diaudit duluan
+- **Tahun-konteks** (#12): tahun 1900–2030 dari halaman dipasangkan dengan
+  setiap frasa → "stevejobs1955", "SteveJobs2011", dst.
+- **Mutasi password**: case, suffix, prefix, tahun, leetspeak, reverse,
+  camelCase/PascalCase/snake_case/kebab-case + inisial frasa
+- **Multi-chain JSON-RPC batch** dengan circuit breaker, sticky-last-good,
+  race-mode, batch auto-split
+- **Auto-discovery RPC** (#25, opsional) dari chainid.network — endpoint
+  publik baru ditarik & ditambahkan, dengan cache 7 hari
+- **Deteksi smart-contract** (#3): `eth_getCode` batch — temuan ditandai
+  `[CONTRACT]` di found.txt agar tidak salah klaim "kunci ditemukan"
+- **Cek ERC-20 utama** (#4): USDT, USDC, DAI, WETH, WBTC dll per chain via
+  `eth_call balanceOf` batch — banyak brainwallet hanya punya stable
+- **Notifikasi Telegram/Discord** (#19, opt-in): kirim alamat & saldo saat
+  temuan masuk. Default **TIDAK** mengirim private key (atur `includePrivKey`)
+- **Resume cerdas** (#23): checkpoint v2 menyimpan `AddressCache` &
+  `seenVariants` — alamat yang sudah pernah dicek tidak diulang
+- **Pratinjau cepat** `--preview=N`
+- **Unit tests** (`npm test`) — 25 test untuk derive/candidates/scraper/multicoin
 
 ## Struktur
 ```
-index.js                   CLI (tanya URL/preset, load config.json, deteksi checkpoint)
-auditor_brainwallet.js     Orkestrator: scrape → derive → cek saldo → checkpoint → simpan
+index.js                   CLI (tanya URL/preset, load config, deteksi checkpoint)
+auditor_brainwallet.js     Orkestrator: scrape → derive → cek saldo → token → contract
 decrypt.js                 Dekripsi & tampilkan hallazgos.enc
-config.example.json        Template konfigurasi
-lib/scraper.js             Scrape URL + ekstraksi kata/frasa + filter stop-words
-lib/scrapeCache.js         Cache persisten kata/frasa antar sesi (auto-prune)
-lib/sources.js             Daftar preset URL bawaan (einstein, bible, …, all)
-lib/candidates.js          Generator varian mutasi (light/medium/heavy)
-lib/derive.js              6 strategi derivasi private key
-lib/etherscan.js           RPC publik multi-chain EVM + JSON-RPC batch + fallback
-lib/multicoin.js           Derivasi & saldo BTC/LTC/DOGE/SOL + retry
-lib/rpcStats.js            Pelacak kesehatan tiap endpoint RPC
-lib/storage.js             AES-GCM frame, found.txt, AddressCache in-memory
-lib/util.js                chunkArray, rate-limiter, concurrency, withRetry, durasi
-lib/logger.js              Logger berwarna + progress bar + ETA + coinSummary + rpcSummary
+config.example.json        Template konfigurasi termasuk blok notify
+lib/scraper.js             Scrape URL + ekstraksi kata/frasa/tahun + stop-words 8 bahasa
+lib/scrapeCache.js         Cache persisten kata/frasa antar sesi
+lib/sources.js             Preset URL bawaan (einstein, bible, crypto-pioneers, …)
+lib/candidates.js          Generator varian mutasi + kombinasi tahun-konteks
+lib/derive.js              11 strategi derivasi (10 default + argon2 opsional)
+lib/etherscan.js           18 chain EVM + JSON-RPC batch + fallback + getCode + tokenBalances
+lib/multicoin.js           9 koin non-EVM (BTC legacy/bech32, LTC, DOGE, BCH, DASH, ZEC, SOL, ADA)
+lib/tokens.js              Registry ERC-20 untuk 18 chain
+lib/chainlist.js           Auto-discovery RPC publik dari chainid.network
+lib/notify.js              Notifikasi Telegram/Discord (aman, tanpa privkey)
+lib/rpcStats.js            Pelacak kesehatan tiap endpoint
+lib/storage.js             AES-GCM frame, found.txt, AddressCache serializable
+lib/util.js                chunkArray, rate-limiter, concurrency, withRetry
+lib/logger.js              Logger berwarna + progress bar + ETA + ringkasan
+tests/                     Unit tests (derive, candidates, scraper, multicoin)
 ```
 
 ## File yang dihasilkan saat runtime
 | File | Isi | Git |
 |------|-----|-----|
-| `aes.key`         | Kunci AES-256 (auto-generate) | gitignored |
-| `hallazgos.enc`   | Temuan terenkripsi (AES-GCM) | gitignored |
-| `found.txt`       | Temuan plain text, tab-separated | gitignored |
-| `.scrape_cache.json` | Kata & frasa yang sudah pernah di-scrape (auto, persisten antar sesi) | gitignored |
-| `progress.json`   | Checkpoint sesi (auto-delete saat selesai) | gitignored |
-
-> Cache alamat hanya di memori — tidak ada file cache alamat yang ditulis ke disk.
-> Cache scrape persisten — token (kata/frasa) yang sudah pernah di-scrape otomatis di-skip pada sesi berikutnya. Hapus `.scrape_cache.json` untuk reset.
-
-## Workflow
-- `Auditor` — `node index.js`
+| `aes.key`               | Kunci AES-256 (auto-generate) | gitignored |
+| `hallazgos.enc`         | Temuan terenkripsi (AES-GCM)  | gitignored |
+| `found.txt`             | Temuan plain text, tab-separated | gitignored |
+| `.scrape_cache.json`    | Cache token yang sudah di-scrape | gitignored |
+| `progress.json`         | Checkpoint v2 (urls/words/years/AddressCache/seenVariants) | gitignored |
+| `.chainlist_cache.json` | Cache hasil auto-discovery RPC (TTL 7 hari) | gitignored |
 
 ## Catatan keamanan
 - Hanya alamat dengan saldo > 0 yang disimpan.
 - `aes.key` JANGAN dihapus — tanpa kunci, `hallazgos.enc` tidak bisa didekripsi.
+- Notifikasi default TIDAK mengirim private key. Untuk mengirim privkey,
+  set `notify.includePrivKey = true` di config.json (TIDAK disarankan).
 - Semua file sensitif & file runtime sudah ada di `.gitignore`.
+
+## Workflow
+- `Auditor` — `node index.js` (interaktif)
+
+## Tes
+- `npm test` — 25 unit test, semua harus lulus.

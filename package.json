@@ -1,14 +1,15 @@
 {
   "name": "brainwallet-auditor",
   "version": "1.0.0",
-  "description": "Node.js CLI brainwallet auditor — scrape teks dari URL, derivasi private key dengan 6 strategi hashing, cek saldo di 9 jaringan blockchain (ETH/BSC/Polygon/Arbitrum/BTC/LTC/DOGE/SOL) via API publik gratis tanpa API key.",
+  "description": "Node.js CLI brainwallet auditor — scrape teks dari URL, derivasi private key dengan 11 strategi hashing (sha256/keccak/md5/pbkdf2/scrypt/argon2/hmac/bip39), cek saldo di 18 EVM chain + BTC (legacy & bech32) / LTC / DOGE / BCH / DASH / ZEC / SOL / ADA via API publik gratis tanpa API key. Termasuk deteksi smart-contract, cek ERC-20 token, notifikasi Telegram/Discord, dan resume cerdas.",
   "main": "index.js",
   "bin": {
     "brainwallet-auditor": "index.js"
   },
   "scripts": {
     "start":   "node index.js",
-    "decrypt": "node decrypt.js"
+    "decrypt": "node decrypt.js",
+    "test":    "node --test tests/"
   },
   "engines": {
     "node": ">=20"
@@ -24,6 +25,8 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "ethers": "^6.16.0"
   }
 }

@@ -56,11 +56,18 @@ Opsi yang sering dipakai:
   --intensity=light|medium|heavy         Tingkat mutasi (default: medium)
   --preview=20                           Lihat 20 item teratas, tidak audit saldo
   --limit=1000                           Batasi jumlah token yang diaudit (untuk uji coba)
+  --checkContracts=true|false            Deteksi alamat contract di EVM (default: true)
+  --checkTokens=true|false               Cek saldo ERC-20 utama (default: true)
+  --autoDiscoverRpcs=true|false          Tarik RPC tambahan dari chainlist.org (default: false)
   --help                                 Tampilkan bantuan ini
 
-Pengaturan lanjutan (koin, chain, strategi, tuning kinerja):
+Pengaturan lanjutan (koin, chain, strategi, tuning kinerja, notifikasi):
   Edit config.json — lihat config.example.json untuk daftar lengkap.
+  Notifikasi Telegram/Discord: isi blok "notify" di config.json.
   Argumen CLI selalu mengalahkan config.json.
+
+Tes:
+  npm test                               Jalankan unit test bawaan.
 `);
 }
 
@@ -127,8 +134,9 @@ async function main() {
     logger.banner();
     process.stdout.write(`  \x1b[90mMasukkan URL atau nama preset (pisahkan dengan koma jika >1).\x1b[0m\n`);
     process.stdout.write(`  \x1b[90mPreset: einstein, shakespeare, twain, proverbs, bible, quran,\x1b[0m\n`);
-    process.stdout.write(`  \x1b[90m         taoteching, bitcoin, movies, quotes, wikiquote-mix\x1b[0m\n`);
-    process.stdout.write(`  \x1b[90m         (lihat semuanya: --sources)\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         taoteching, bitcoin, movies, quotes, wikiquote-mix,\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         crypto-pioneers, babynames, mottos, pop-culture,\x1b[0m\n`);
+    process.stdout.write(`  \x1b[90m         songs, games  (lihat semuanya: --sources)\x1b[0m\n`);
     process.stdout.write(`  \x1b[90mContoh: einstein  atau  https://en.wikipedia.org/wiki/Bitcoin\x1b[0m\n\n`);
     process.stdout.write(`  \x1b[33mCatatan:\x1b[0m \x1b[90mCache alamat tidak disimpan — setiap sesi dimulai dari awal.\x1b[0m\n\n`);
 

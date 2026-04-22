@@ -4,48 +4,69 @@
  * Alur:
  *  1. Scrape teks dari URL → ekstrak frasa prioritas (title/heading/blockquote/
  *     teks dalam tanda kutip), frasa biasa (kalimat 4–10 kata + n-gram 3/4/5),
- *     dan kata tunggal. Token yang sudah pernah di-scrape disaring via cache.
+ *     kata tunggal, dan tahun-konteks. Token yang sudah pernah di-scrape
+ *     disaring via cache.
  *  2. Hasilkan varian mutasi: case, suffix, prefix, tahun, leetspeak,
  *     camelCase/PascalCase/no-space/snake_case/kebab-case + inisial frasa
- *     (intensitas: light/medium/heavy).
- *  3. Derivasi private key dengan 6 strategi (sha256, doubleSha256, keccak256,
- *     sha256NoSpace, sha256Lower, md5).
- *  4. Cek saldo di 9 jaringan secara paralel (ETH/BSC/Polygon/Arbitrum + BTC/LTC/DOGE/SOL).
- *     EVM pakai JSON-RPC batch + multi-endpoint fallback.
- *  5. Retry otomatis saat API gagal (exponential backoff, maks 3x).
- *  6. Checkpoint otomatis — bisa dilanjutkan jika proses dihentikan di tengah jalan.
- *  7. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
- *  8. Tampilkan ringkasan per koin + kesehatan RPC di akhir sesi.
- *
- * Cache alamat hanya di memori — tidak ada file cache alamat yang ditulis ke disk.
+ *     + kombinasi `phrase × year-konteks` (intensitas: light/medium/heavy).
+ *  3. Derivasi private key dengan banyak strategi (sha256, doubleSha256,
+ *     keccak256, sha256NoSpace, sha256Lower, md5, pbkdf2, scrypt,
+ *     hmacBitcoinSeed, bip39Seed; opsional: argon2).
+ *  4. Cek saldo native di banyak chain EVM + non-EVM (BTC legacy + bech32,
+ *     LTC/DOGE/BCH/DASH/ZEC/SOL/ADA) secara paralel.
+ *  5. Kalau opsi `checkContracts` aktif, deteksi alamat yang berupa contract
+ *     (eth_getCode != "0x") dan tandai khusus.
+ *  6. Kalau opsi `checkTokens` aktif, cek juga saldo ERC-20 utama per chain
+ *     (USDT, USDC, DAI, WETH, dll).
+ *  7. Auto-discovery RPC publik dari chainlist.org (kalau opsi aktif) untuk
+ *     menambah ketahanan endpoint.
+ *  8. Notifikasi temuan ke Telegram bot dan/atau Discord webhook (opt-in).
+ *  9. Retry otomatis saat API gagal (exponential backoff, maks 3x).
+ * 10. Checkpoint otomatis (termasuk AddressCache) — bisa dilanjutkan kalau
+ *     proses dihentikan di tengah, dan tidak akan mengulang pengecekan
+ *     alamat yang sudah pernah dicek (resume cerdas per-coin).
+ * 11. Simpan temuan terenkripsi (hallazgos.enc) + plain text (found.txt).
+ * 12. Tampilkan ringkasan per koin + kesehatan RPC di akhir sesi.
  */
 
 const fs     = require("fs");
 const logger = require("./lib/logger");
 const { createRateLimiter, runWithConcurrency, formatDuration, chunkArray } = require("./lib/util");
-const { balanceMulti, chainName, chainBatchSize } = require("./lib/etherscan");
-const { deriveAll } = require("./lib/derive");
-const { generateVariants } = require("./lib/candidates");
+const {
+    balanceMulti, codeOfMulti, tokenBalancesMulti,
+    chainName, chainBatchSize, addRpcs,
+} = require("./lib/etherscan");
+const { deriveAll }              = require("./lib/derive");
+const { generateVariants }       = require("./lib/candidates");
 const { appendEncryptedFrame, appendFoundTxt, parseAesKey, AddressCache } = require("./lib/storage");
-const { scrapeUrls } = require("./lib/scraper");
-const { COINS, getLimiter } = require("./lib/multicoin");
-const scrapeCache = require("./lib/scrapeCache");
-const rpcStats = require("./lib/rpcStats");
+const { scrapeUrls }             = require("./lib/scraper");
+const { COINS, getLimiter }      = require("./lib/multicoin");
+const { tokensForChain, chainHasTokens } = require("./lib/tokens");
+const { discoverRpcs }           = require("./lib/chainlist");
+const notify                     = require("./lib/notify");
+const scrapeCache                = require("./lib/scrapeCache");
+const rpcStats                   = require("./lib/rpcStats");
 
 const CHECKPOINT_FILE = "progress.json";
 
 const DEFAULTS = {
-    chunkSize:   1000,
-    concurrency: 5,
-    rateLimit:   5,
-    batchSize:   80,
-    intensity:   "medium",
-    chains:      [1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324],
-    coins:       ["eth", "btc", "ltc", "doge", "sol"],
-    strategies:  ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower", "md5"],
-    logLevel:    "info",
-    outFile:     "hallazgos.enc",
-    foundFile:   "found.txt",
+    chunkSize:        1000,
+    concurrency:      5,
+    rateLimit:        5,
+    batchSize:        80,
+    intensity:        "medium",
+    chains:           [1, 56, 137, 42161, 10, 8453, 43114, 100, 59144, 534352, 324,
+                       25, 42220, 1284, 5000, 81457, 204, 1101],
+    coins:            ["eth", "btc", "btc-bech32", "ltc", "doge", "bch", "dash", "zec", "sol", "ada"],
+    strategies:       ["sha256", "doubleSha256", "keccak256", "sha256NoSpace", "sha256Lower",
+                       "md5", "pbkdf2", "scrypt", "hmacBitcoinSeed", "bip39Seed"],
+    logLevel:         "info",
+    outFile:          "hallazgos.enc",
+    foundFile:        "found.txt",
+    checkContracts:   true,    // #3 — deteksi smart contract
+    checkTokens:      true,    // #4 — cek ERC-20 untuk chain yang tokens-nya didaftarkan
+    autoDiscoverRpcs: false,   // #25 — tarik RPC tambahan dari chainlist.org
+    notify:           {},      // #19 — { telegram:{...}, discord:{...} }
 };
 
 function buildOptions(overrides = {}) {
@@ -64,19 +85,50 @@ function buildOptions(overrides = {}) {
     if (typeof merged.rateLimit   === "string") merged.rateLimit   = parseInt(merged.rateLimit, 10);
     if (typeof merged.batchSize   === "string") merged.batchSize   = parseInt(merged.batchSize, 10);
     if (typeof merged.limit       === "string") merged.limit       = parseInt(merged.limit, 10);
+    // Boolean flags via CLI string ("true"/"false"/"1"/"0").
+    for (const k of ["checkContracts", "checkTokens", "autoDiscoverRpcs"]) {
+        const v = merged[k];
+        if (typeof v === "string") merged[k] = /^(1|true|yes|on)$/i.test(v);
+    }
     return merged;
 }
 
-// ---------- checkpoint ----------
+// ───────── checkpoint ─────────
 function saveCheckpoint(data) {
     try { fs.writeFileSync(CHECKPOINT_FILE, JSON.stringify(data)); } catch {}
 }
-
 function clearCheckpoint() {
     try { fs.unlinkSync(CHECKPOINT_FILE); } catch {}
 }
 
-// ---------- process block ----------
+// ───────── helper: bagi temuan ETH menjadi native + token + tandai contract ─────────
+function buildEthRecords(coin, chainId, holder, balanceWei, tokens, contractsSet) {
+    const records  = [];
+    const isContr  = contractsSet?.has(holder.address.toLowerCase());
+    const cn       = chainName(chainId);
+
+    if (balanceWei > 0n) {
+        records.push({
+            coin, chainName: cn, address: holder.address, balance: balanceWei.toString(),
+            phrase: holder.phrase, strategy: holder.strategy, privHex: holder.privHex,
+            isContract: !!isContr,
+        });
+    }
+    if (tokens && tokens.length > 0) {
+        for (const t of tokens) {
+            records.push({
+                coin, chainName: cn, address: holder.address,
+                balance: `${t.balance.toString()} (${t.symbol}, ${t.decimals}d)`,
+                phrase: holder.phrase, strategy: holder.strategy, privHex: holder.privHex,
+                isContract: !!isContr,
+                tokenSymbol: t.symbol, tokenAddress: t.address,
+            });
+        }
+    }
+    return records;
+}
+
+// ───────── proses 1 blok ─────────
 async function processBlock(candidates, opts, ctx) {
     const derived = [];
     for (const phrase of candidates) {
@@ -86,7 +138,7 @@ async function processBlock(candidates, opts, ctx) {
 
     const enabledCoins = opts.coins.filter((c) => c === "eth" || COINS[c]);
 
-    // Bangun daftar alamat per koin (dedupe in-memory)
+    // Bangun daftar alamat per koin (dedupe in-memory + skip yang sudah pernah dicek).
     const perCoin = {};
     for (const coin of enabledCoins) {
         perCoin[coin] = [];
@@ -112,29 +164,71 @@ async function processBlock(candidates, opts, ctx) {
         if (coin === "eth") {
             const byAddr  = new Map(list.map((x) => [x.address.toLowerCase(), x]));
             const allAddr = list.map((x) => x.address);
+
             for (const chainId of opts.chains) {
-                // Setiap chain dapat batch size sendiri (Arbitrum, Linea dll
-                // pakai batch lebih kecil supaya tidak kena rate-limit).
-                const sz      = chainBatchSize(chainId, opts.batchSize);
-                const batches = chunkArray(allAddr, sz);
-                let evmDone   = 0;
-                const tasks   = batches.map((batch) => async () => {
+                const sz       = chainBatchSize(chainId, opts.batchSize);
+                const batches  = chunkArray(allAddr, sz);
+                let evmDone    = 0;
+
+                // Kumpulan saldo native + alamat non-zero (untuk lanjutan: token + contract).
+                const tasks = batches.map((batch) => async () => {
                     try {
                         const r = await balanceMulti(chainId, batch, ctx.limiter);
                         evmDone++;
                         logger.coinBatch(`ETH/${chainName(chainId)}`, evmDone, batches.length, batch.length);
-                        return r;
+                        return { batch, balances: r };
                     } catch (e) {
                         evmDone++;
                         logger.warn(`evm ${chainName(chainId)}: ${e.message}`);
-                        return new Map();
+                        return { batch, balances: new Map() };
                     }
                 });
-                const maps = await runWithConcurrency(tasks, opts.concurrency);
-                for (const m of maps) for (const [addr, bal] of m.entries()) {
-                    if (bal > 0n) {
-                        const o = byAddr.get(addr);
-                        if (o) allFound.push({ ...o, coin: "eth", chainName: chainName(chainId), balance: bal.toString() });
+                const results = await runWithConcurrency(tasks, opts.concurrency);
+
+                // Pilih alamat yang akan ikut tahap "kaya" (token-check + contract-check).
+                // Native > 0 selalu wajib. Untuk token-check kita cek SEMUA alamat (banyak
+                // brainwallet hanya punya stable, tanpa native untuk gas).
+                const richAddrs = new Set();      // native > 0
+                for (const { balances } of results) {
+                    for (const [addr, bal] of balances.entries()) if (bal > 0n) richAddrs.add(addr);
+                }
+
+                // (a) Token-check ERC-20 (kalau diaktifkan & chain punya daftar token).
+                let tokenMap = new Map();
+                if (opts.checkTokens && chainHasTokens(chainId)) {
+                    const tokenList = Object.entries(tokensForChain(chainId))
+                        .map(([symbol, info]) => ({ symbol, ...info }));
+                    // Cek SEMUA alamat untuk token (bukan hanya yang punya native > 0).
+                    for (const { batch } of results) {
+                        try {
+                            const tm = await tokenBalancesMulti(chainId, batch, tokenList, ctx.limiter);
+                            for (const [addr, toks] of tm.entries()) {
+                                tokenMap.set(addr, toks);
+                                richAddrs.add(addr);   // alamat punya token → ikut contract-check
+                            }
+                        } catch (e) {
+                            logger.warn(`token ${chainName(chainId)}: ${e.message}`);
+                        }
+                    }
+                }
+
+                // (b) Contract-check (kalau diaktifkan & ada alamat berdana).
+                let contractsSet = new Set();
+                if (opts.checkContracts && richAddrs.size > 0) {
+                    try {
+                        contractsSet = await codeOfMulti(chainId, [...richAddrs], ctx.limiter);
+                    } catch {}
+                }
+
+                // (c) Bangun record per alamat.
+                for (const { balances } of results) {
+                    for (const [addr, bal] of balances.entries()) {
+                        const tokens = tokenMap.get(addr) || [];
+                        if (bal === 0n && tokens.length === 0) continue;
+                        const holder = byAddr.get(addr);
+                        if (!holder) continue;
+                        const recs = buildEthRecords("eth", chainId, holder, bal, tokens, contractsSet);
+                        for (const r of recs) allFound.push(r);
                     }
                 }
             }
@@ -169,15 +263,21 @@ async function processBlock(candidates, opts, ctx) {
             private_key_hex: f.privHex,
             address:         f.address,
             balance:         f.balance,
+            is_contract:     !!f.isContract,
+            token_symbol:    f.tokenSymbol || null,
+            token_address:   f.tokenAddress || null,
             checked_at_unix: Math.floor(Date.now() / 1000),
         }));
         appendEncryptedFrame(records, opts.outFile, ctx.aesKey);
         appendFoundTxt(records, opts.foundFile);
         for (const r of records) logger.found(r);
+        // Notifikasi (Telegram/Discord) — async, tidak menahan audit.
+        if (notify.isEnabled()) {
+            for (const r of records) notify.notifyFinding(r).catch(() => {});
+        }
         logger.success(`${records.length} alamat berdana disimpan ke ${opts.outFile} & ${opts.foundFile}`);
     }
 
-    // Hitung statistik per koin untuk ringkasan akhir
     const coinFoundCount = {};
     for (const f of allFound) coinFoundCount[f.coin] = (coinFoundCount[f.coin] || 0) + 1;
 
@@ -188,20 +288,43 @@ async function processBlock(candidates, opts, ctx) {
             found:   coinFoundCount[coin] || 0,
         });
     }
-
     return { derived: derived.length, fresh: totalChecked, found: allFound.length, coinStats };
 }
 
-// ---------- audit utama ----------
+// ───────── audit utama ─────────
 async function runAudit(overrides = {}) {
     const opts = buildOptions(overrides);
     logger.setLevel(opts.logLevel);
 
-    const isResume     = opts.resume && opts.checkpoint;
-    const cpData       = opts.checkpoint || {};
-    const aesKey       = parseAesKey();
-    const startTime    = Date.now();
-    const blockTimes   = [];
+    // Notifikasi (#19).
+    if (opts.notify && (opts.notify.telegram || opts.notify.discord)) {
+        if (notify.configure(opts.notify)) {
+            logger.info(`Notifikasi aktif: ${[
+                opts.notify.telegram && "Telegram",
+                opts.notify.discord  && "Discord",
+            ].filter(Boolean).join(" + ")}`);
+        }
+    }
+
+    // Auto-discovery RPC (#25).
+    if (opts.autoDiscoverRpcs) {
+        try {
+            const map = await discoverRpcs(opts.chains);
+            let totalAdded = 0;
+            for (const [chainId, urls] of map.entries()) {
+                totalAdded += addRpcs(chainId, urls);
+            }
+            if (totalAdded > 0) logger.info(`Auto-discovery: +${totalAdded} RPC publik dari chainlist.org`);
+        } catch (e) {
+            logger.warn(`Auto-discovery RPC gagal: ${e.message}`);
+        }
+    }
+
+    const isResume   = opts.resume && opts.checkpoint;
+    const cpData     = opts.checkpoint || {};
+    const aesKey     = parseAesKey();
+    const startTime  = Date.now();
+    const blockTimes = [];
 
     const stats = isResume
         ? { ...cpData.stats, speed: 0, skipped: cpData.stats?.skipped || 0 }
@@ -210,7 +333,17 @@ async function runAudit(overrides = {}) {
     const cumCoinStats = new Map();
     let   currentCp    = null;
 
-    // SIGINT — simpan checkpoint sebelum keluar
+    // Resume: pulihkan AddressCache & seenVariants dari checkpoint (#23).
+    const restoredCache    = isResume ? AddressCache.deserialize(cpData.addressCache || []) : new AddressCache();
+    const restoredSeen     = new Set(isResume ? (cpData.seenVariants || []) : []);
+
+    const ctx = {
+        aesKey,
+        limiter:      createRateLimiter(opts.rateLimit),
+        cache:        restoredCache,
+        seenVariants: restoredSeen,
+    };
+
     const sigintHandler = () => {
         if (currentCp) {
             saveCheckpoint(currentCp);
@@ -220,28 +353,24 @@ async function runAudit(overrides = {}) {
     };
     process.once("SIGINT", sigintHandler);
 
-    const ctx = {
-        aesKey,
-        limiter:      createRateLimiter(opts.rateLimit),
-        cache:        new AddressCache(),
-        seenVariants: new Set(),   // dedup varian antar blok
-    };
-
     try {
         let words;
+        let years      = [];
         let startBlock = 0;
 
         if (isResume) {
-            // ── Resume dari checkpoint ─────────────────────
             words      = cpData.words;
+            years      = cpData.years || [];
             startBlock = cpData.blocksDone;
             logger.section("Melanjutkan Sesi");
             logger.info(`Strategi  : ${opts.strategies.join(", ")}`);
             logger.info(`Koin      : ${opts.coins.join(", ")}`);
             logger.info(`EVM Chain : ${opts.chains.map(chainName).join(", ")}`);
             logger.info(`Mulai dari blok ke-${startBlock + 1} dari ${cpData.totalBlocks}`);
+            if (ctx.cache.size > 0) {
+                logger.info(`Cache alamat dipulihkan: ${ctx.cache.size} entri (akan di-skip)`);
+            }
         } else {
-            // ── Sesi baru ──────────────────────────────────
             if (!opts.urls || opts.urls.length === 0) {
                 throw new Error("Tidak ada URL untuk di-scrape.");
             }
@@ -250,6 +379,8 @@ async function runAudit(overrides = {}) {
             logger.info(`Koin      : ${opts.coins.join(", ")}`);
             logger.info(`EVM Chain : ${opts.chains.map(chainName).join(", ")}`);
             logger.info(`Intensitas: ${opts.intensity}`);
+            if (opts.checkContracts) logger.info(`Deteksi contract: AKTIF`);
+            if (opts.checkTokens)    logger.info(`Cek ERC-20 token : AKTIF`);
 
             logger.section("Scraping URL");
             const cache = scrapeCache.load();
@@ -258,8 +389,13 @@ async function runAudit(overrides = {}) {
                 logger.info(`Cache scrape: ${cache.words.size} kata + ${cache.phrases.size} frasa (akan di-skip)`);
             }
             logger.info(`Mengambil teks dari ${opts.urls.length} URL...`);
-            words = await scrapeUrls(opts.urls, cache);
+            const result = await scrapeUrls(opts.urls, cache);
+            words = result.items;
+            years = result.years;
             scrapeCache.save(cache);
+            if (years.length > 0) {
+                logger.info(`Tahun-konteks ditemukan: ${years.slice(0, 8).join(", ")}${years.length > 8 ? "..." : ""}`);
+            }
             if (opts.limit && opts.limit > 0 && words.length > opts.limit) {
                 logger.info(`Membatasi hasil scrape ke ${opts.limit} token teratas (--limit).`);
                 words = words.slice(0, opts.limit);
@@ -269,8 +405,6 @@ async function runAudit(overrides = {}) {
                 logger.warn("Tidak ada token baru (semua sudah pernah di-scrape). Berhenti.");
                 return finalize(stats, startTime, cumCoinStats, ctx);
             }
-
-            // --preview=N → tampilkan N item teratas hasil scrape lalu keluar.
             if (opts.preview) {
                 const n = Math.max(1, parseInt(opts.preview, 10) || 20);
                 logger.section(`Pratinjau (${Math.min(n, words.length)} item teratas)`);
@@ -278,16 +412,23 @@ async function runAudit(overrides = {}) {
                 logger.info(`(${words.length} total — jalankan tanpa --preview untuk audit penuh)`);
                 return finalize(stats, startTime, cumCoinStats, ctx);
             }
+
+            // Notifikasi mulai sesi.
+            notify.notifyStart({
+                intensity: opts.intensity, coins: opts.coins,
+                chains: opts.chains.map(chainName), urls: opts.urls,
+            }).catch(() => {});
         }
 
         logger.section("Proses Audit");
-        const chunks     = chunkArray(words, opts.chunkSize);
+        const chunks      = chunkArray(words, opts.chunkSize);
         const totalBlocks = chunks.length;
 
         for (let i = startBlock; i < totalBlocks; i++) {
             const candidates = generateVariants(chunks[i], {
                 intensity: opts.intensity,
                 seen:      ctx.seenVariants,
+                years,
             });
             const t0 = Date.now();
             const r  = await processBlock(candidates, opts, ctx);
@@ -299,7 +440,6 @@ async function runAudit(overrides = {}) {
             stats.found      += r.found;
             stats.candidates += candidates.length;
 
-            // Gabung coinStats per blok ke kumulatif
             for (const [coin, s] of r.coinStats.entries()) {
                 const prev = cumCoinStats.get(coin) || { checked: 0, found: 0 };
                 cumCoinStats.set(coin, {
@@ -308,7 +448,6 @@ async function runAudit(overrides = {}) {
                 });
             }
 
-            // Kecepatan & ETA — rata² 5 blok terakhir biar lebih responsif
             const elapsedSec = (Date.now() - startTime) / 1000;
             const speed      = elapsedSec > 0 ? Math.round(stats.fresh / elapsedSec) : 0;
             const recent     = blockTimes.slice(-5);
@@ -321,7 +460,7 @@ async function runAudit(overrides = {}) {
                     .toLocaleTimeString("id-ID", { hour12: false, hour: "2-digit", minute: "2-digit" });
                 etaStr = `${formatDuration(remMs)} (~${finish})`;
             }
-            stats.speed      = speed;
+            stats.speed = speed;
 
             logger.progress(
                 i + 1, totalBlocks, candidates.length,
@@ -330,14 +469,19 @@ async function runAudit(overrides = {}) {
                 speed, etaStr
             );
 
-            // Simpan checkpoint setelah tiap blok
+            // Checkpoint: simpan progres + AddressCache + seenVariants.
+            // seenVariants dibatasi 500K entri supaya checkpoint tidak meledak.
+            const seenSer = [...ctx.seenVariants].slice(-500_000);
             currentCp = {
-                version:     1,
-                urls:        opts.urls || cpData.urls || [],
+                version:      2,
+                urls:         opts.urls || cpData.urls || [],
                 words,
+                years,
                 totalBlocks,
-                blocksDone:  i + 1,
-                stats:       { ...stats },
+                blocksDone:   i + 1,
+                stats:        { ...stats },
+                addressCache: ctx.cache.serialize(200_000),
+                seenVariants: seenSer,
             };
             saveCheckpoint(currentCp);
         }
@@ -345,11 +489,12 @@ async function runAudit(overrides = {}) {
         process.removeListener("SIGINT", sigintHandler);
     }
 
-    // Audit selesai — hapus checkpoint
     clearCheckpoint();
     currentCp = null;
 
-    return finalize(stats, startTime, cumCoinStats, ctx);
+    const result = finalize(stats, startTime, cumCoinStats, ctx);
+    notify.notifyFinish(stats, formatDuration(Date.now() - startTime)).catch(() => {});
+    return result;
 }
 
 function finalize(stats, startTime, cumCoinStats, ctx) {
